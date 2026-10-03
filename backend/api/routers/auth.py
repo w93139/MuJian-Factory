@@ -37,7 +37,7 @@ async def login(credentials: LoginRequest, request: Request, response: Response)
     role = ""
     invite = None
     admin_password = os.environ["MUJIAN_ADMIN_PASSWORD"]
-    if credentials.password and hmac.compare_digest(credentials.password, admin_password):
+    if credentials.password and hmac.compare_digest(credentials.password.encode("utf-8"), admin_password.encode("utf-8")):
         role = "admin"
     elif credentials.invite_code:
         invite = valid_invite(credentials.invite_code, mark_used=True)

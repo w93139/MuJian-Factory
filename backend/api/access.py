@@ -2,7 +2,6 @@
 
 import re
 from posixpath import normpath
-from urllib.parse import unquote
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -48,12 +47,11 @@ async def public_access_middleware(request: Request, call_next):
     if not public_mode():
         return await call_next(request)
     path = request.scope["path"]
-    # ASGI servers decode URL escapes before routing. Decode once more so that
-    # encoded separators and dots cannot change the StaticFiles target later.
-    decoded_path = unquote(path)
-    if ".." in decoded_path.split("/") or ".." in path.split("/"):
+    # ASGI already decoded the URL. Authorize that exact filesystem path;
+    # decoding again could authorize a different file from StaticFiles.
+    if ".." in path.split("/"):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
-    path = normpath(decoded_path)
+    path = normpath(path)
     if path == "/code/data" or path.startswith("/code/data/"):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
     if request.method == "OPTIONS":

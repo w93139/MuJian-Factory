@@ -6,14 +6,18 @@ import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from api import auth, showcase, showcase_media
 from api.app import app
 from api.routers import admin, configuration, sessions
+from api.routers import pipelines as pipeline_router
 from api.routers import sandbox as sandbox_router
 from pipelines import storage
+from pipelines.events import _subscribers, publish_task_event
 
 
 @pytest.fixture
@@ -79,6 +83,31 @@ def test_public_static_files_reject_traversal_and_data_for_every_role(public_cli
     for path in paths:
         assert public_client.get(path).status_code == 404
     assert public_client.get("/code/result/image/public/showcase.mp4").content == b"media"
+
+
+async def test_media_authorization_uses_the_same_decoded_path_as_static_files(public_client, tmp_path, monkeypatch):
+    result_dir = tmp_path / "result"
+    private_dir = result_dir / "image" / "%70ublic"
+    private_dir.mkdir(parents=True)
+    (private_dir / "private.mp4").write_bytes(b"private")
+    public_dir = result_dir / "image" / "public"
+    public_dir.mkdir()
+    (public_dir / "image.png").write_bytes(b"public")
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "invites.json").write_text("private-data", encoding="utf-8")
+    static = next(route.app for route in app.routes if getattr(route, "path", None) == "/code")
+    monkeypatch.setattr(static, "directory", str(tmp_path))
+    monkeypatch.setattr(static, "all_directories", [str(tmp_path)])
+    monkeypatch.setattr(showcase_media.settings, "RESULT_DIR", str(result_dir))
+    monkeypatch.setattr(showcase_media, "is_showcase_session", lambda sid: sid == "public")
+    invite = auth.create_invite()
+    token, _ = auth.session_cookie("guest", invite=invite)
+    # ASGITransport, like Uvicorn, supplies the once-decoded URL path.
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test", cookies={auth.COOKIE_NAME: token}) as client:
+        assert (await client.get("/code/result/image/public/image.png")).content == b"public"
+        assert (await client.get("/code/result/image/%2570ublic/private.mp4")).status_code == 404
+        for traversal in ("..", "%2e%2e", "%2E%2e", "..%2f"):
+            assert (await client.get(f"/code/result/{traversal}/data/invites.json")).status_code == 404
 
 
 def test_roles_invites_revocation_and_static_secret_protection(public_client):
@@ -148,6 +177,51 @@ def test_login_failures_do_not_lock_other_client_ips(public_client):
     assert second.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 200
     assert "198.51.100.10" in auth._login_failures
     assert "198.51.100.11" not in auth._login_failures
+
+
+def test_unicode_credentials_return_normal_login_result(public_client, monkeypatch):
+    auth.create_invite()
+    assert public_client.post("/api/auth/login", json={"password": "错误密码"}).status_code == 401
+    assert public_client.post("/api/auth/login", json={"invite_code": "中文邀请码"}).status_code == 401
+    monkeypatch.setenv("MUJIAN_ADMIN_PASSWORD", "管理员的测试密码")
+    assert public_client.post("/api/auth/login", json={"password": "管理员的测试密码"}).status_code == 200
+
+
+@pytest.mark.parametrize("change", ["revoke", "unshowcase", "expire", "delete"])
+async def test_existing_guest_task_stream_stops_when_access_is_removed(public_client, tmp_path, monkeypatch, change):
+    monkeypatch.setattr(storage, "TASK_DATA_DIR", str(tmp_path / "tasks"))
+    monkeypatch.setattr(storage, "TASK_RESULT_DIR", str(tmp_path / "results"))
+    task = storage.create_task("standard", {})
+    task_id = task["task_id"]
+    storage.set_task_showcase(task_id, True)
+    invite = auth.create_invite()
+    token, _ = auth.session_cookie("guest", invite=invite)
+    request = Request({
+        "type": "http", "method": "GET", "path": f"/api/tasks/{task_id}/events",
+        "headers": [(b"cookie", f"{auth.COOKIE_NAME}={token}".encode())],
+    })
+    response = await pipeline_router.subscribe_task_events(task_id, request)
+    iterator = response.body_iterator
+    try:
+        assert '"type": "snapshot"' in await anext(iterator)
+        publish_task_event(task_id, {"type": "progress", "progress": 10})
+        assert '"progress": 10' in await anext(iterator)
+        if change == "revoke":
+            auth.revoke_invite(invite["code"])
+        elif change == "unshowcase":
+            storage.set_task_showcase(task_id, False)
+        elif change == "expire":
+            stored = auth.list_invites()
+            stored[0]["expires_at"] = time.time() - 1
+            auth._write_invites(stored)
+        else:
+            storage.delete_task(task_id)
+        publish_task_event(task_id, {"type": "artifact", "path": "private-after-revocation.mp4"})
+        with pytest.raises(StopAsyncIteration):
+            await anext(iterator)
+    finally:
+        await iterator.aclose()
+    assert task_id not in _subscribers
 
 
 def test_guest_config_omits_all_secret_fields_and_admin_cannot_change_key(public_client):

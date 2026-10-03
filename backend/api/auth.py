@@ -124,7 +124,7 @@ def revoke_invite(code: str) -> bool:
     with _invite_lock:
         invites = _read_invites()
         for item in invites:
-            if hmac.compare_digest(str(item.get("code", "")), code.upper()):
+            if hmac.compare_digest(str(item.get("code", "")).encode("utf-8"), code.upper().encode("utf-8")):
                 item["revoked"] = True
                 _write_invites(invites)
                 return True
@@ -136,7 +136,7 @@ def valid_invite(code: str, *, mark_used: bool = False) -> dict[str, Any] | None
         invites = _read_invites()
         for item in invites:
             if (
-                hmac.compare_digest(str(item.get("code", "")), code.upper())
+                hmac.compare_digest(str(item.get("code", "")).encode("utf-8"), code.upper().encode("utf-8"))
                 and not item.get("revoked")
                 and float(item.get("expires_at", 0)) > time.time()
             ):

@@ -1,6 +1,7 @@
 import base64
 import os
 import re
+from contextlib import aclosing
 from html import escape
 from typing import Optional
 from urllib.parse import quote
@@ -323,8 +324,19 @@ async def subscribe_task_events(task_id: str, request: Request):
         "status": metadata.get("status"),
         "progress": metadata.get("progress", 0),
     }
+
+    async def authorized_events():
+        async with aclosing(task_event_stream(task_id, initial_event=initial_event)) as events:
+            async for event in events:
+                role = role_from_request(request)
+                if role != "admin":
+                    current = load_task(task_id) if role == "guest" else None
+                    if not current or current.get("showcase") is not True:
+                        return
+                yield event
+
     return StreamingResponse(
-        task_event_stream(task_id, initial_event=initial_event),
+        authorized_events(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
