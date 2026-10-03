@@ -139,6 +139,13 @@ def test_image_client_propagates_failure_and_rejects_empty_result(tmp_path):
         client.generate_image("scene", model="doubao-seedream-5-0-260128", save_dir=str(tmp_path))
 
 
+def test_text_only_image_model_rejects_reference_input():
+    with pytest.raises(ValueError, match="i2i"):
+        ImageClient().generate_image(
+            "scene", image_paths=["reference.png"], model="wan2.6-t2i"
+        )
+
+
 def test_video_client_rejects_empty_result(tmp_path):
     client = VideoClient()
     client._seedance_client = MagicMock()

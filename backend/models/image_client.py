@@ -113,7 +113,7 @@ class ImageClient:
         # Default fallback if ratio or resolution is not found
         size = custom_size or size_map.get(video_ratio, size_map["16:9"]).get(resolution, "1920*1080")
 
-        model = model or Config.IMAGE_T2I_MODEL
+        model = model or (Config.IMAGE_IT2I_MODEL if image_paths else Config.IMAGE_T2I_MODEL)
 
         if Config.PRINT_MODEL_INPUT:
             lines = [
@@ -136,8 +136,9 @@ class ImageClient:
             logger.info("\n%s", "\n".join(lines))
             
         model_info = get_model_config(model)
-        if not set(model_info.get("type", [])) & {"t2i", "i2i"}:
-            raise ValueError(f"模型不支持图片生成: {model}")
+        required_type = "i2i" if image_paths else "t2i"
+        if required_type not in model_info.get("type", []):
+            raise ValueError(f"模型不支持{required_type}图片生成: {model}")
         provider = model_info["provider"]
         
         # Prepare save directory
