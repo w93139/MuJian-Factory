@@ -6,6 +6,7 @@ import type { StageViewProps } from './types';
 import { assetUrl } from './utils';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
+import ErrorDetails from '@/components/ErrorDetails';
 
 /* ─── 类型 ─── */
 interface ClipItem {
@@ -17,6 +18,7 @@ interface ClipItem {
   selected: string;       // 当前选中的视频路径
   versions: string[];     // 所有历史版本路径
   status?: 'pending' | 'done' | 'failed' | 'running';
+  error?: string;
 }
 
 /* ─── 水平滚动视频画廊 ─── */
@@ -215,6 +217,7 @@ function ClipRow({
             )
           )}
         </div>
+        {isFailed && <ErrorDetails error={clip.error} className="mb-3" />}
         {isEditing ? (
           <textarea
             value={editDesc ?? clip.description}

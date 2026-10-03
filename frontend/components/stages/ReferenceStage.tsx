@@ -8,6 +8,7 @@ import { uploadArtifactImage } from '@/lib/workflowApi';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
 import ImageLightbox from './ImageLightbox';
+import ErrorDetails from '@/components/ErrorDetails';
 
 /* ─── 类型 ─── */
 interface SceneItem {
@@ -18,6 +19,7 @@ interface SceneItem {
   selected: string;       // 当前选中的文件路径
   versions: string[];     // 所有历史版本路径
   status?: 'pending' | 'done' | 'failed' | 'running';
+  error?: string;
 }
 
 /* ─── 水平滚动图片画廊 ─── */
@@ -226,6 +228,7 @@ function SceneRow({
             )
           )}
         </div>
+        {isFailed && <ErrorDetails error={scene.error} className="mb-3" />}
         {isEditing ? (
           <textarea
             value={editDesc}

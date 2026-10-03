@@ -39,6 +39,7 @@ export interface ProjectParams {
 interface HistoryItem {
   id: string;
   idea: string;
+  showcase?: boolean;
   style?: string;
   date: string;
   status: string;
@@ -49,6 +50,7 @@ interface HomePageProps {
   onStartProject: (params: ProjectParams, autoMode?: boolean) => void;
   onResumeProject: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => Promise<void>;
+  onToggleShowcase: (sessionId: string, showcase: boolean) => Promise<void>;
   history: HistoryItem[];
 }
 
@@ -75,7 +77,7 @@ function stageProgressLabel(statusMap?: Record<string, string>): { text: string;
   return { text: `已完成：${name} (${completed.length}/${STAGES.length})`, color: 'text-blue-600' };
 }
 
-export default function HomePage({ onStartProject, onResumeProject, onDeleteSession, history }: HomePageProps) {
+export default function HomePage({ onStartProject, onResumeProject, onDeleteSession, onToggleShowcase, history }: HomePageProps) {
   const [idea, setIdea] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState('realistic');
@@ -105,6 +107,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
   const [manageMode, setManageMode] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState('');
+  const [showcaseError, setShowcaseError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [llmProviders, setLlmProviders] = useState<ProviderGroup[]>([]);
   const [vlmProviders, setVlmProviders] = useState<ProviderGroup[]>([]);
@@ -707,6 +710,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
               {manageMode ? '完成' : '管理'}
             </button>
           </div>
+          {showcaseError && <p role="alert" className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{showcaseError}</p>}
           <div className="max-h-[60vh] overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-3">
               {history.map(item => {
@@ -723,6 +727,15 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
                         {item.idea}
                       </div>
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <button type="button" onClick={event => {
+                          event.stopPropagation();
+                          setShowcaseError('');
+                          void onToggleShowcase(item.id, !item.showcase).catch(cause =>
+                            setShowcaseError(cause instanceof Error ? cause.message : '更新示例状态失败')
+                          );
+                        }} className={`rounded px-1.5 py-0.5 text-[10px] ${item.showcase ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>
+                          {item.showcase ? '已设为示例' : '设为示例'}
+                        </button>
                         {item.style && (
                           <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
                             {item.style}

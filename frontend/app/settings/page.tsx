@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, Loader2, Plus, Save, Settings, Trash2, XCircle } from 'lucide-react';
 import BrandHeader from '@/components/BrandHeader';
+import InvitePanel from '@/components/InvitePanel';
+import { useAuth } from '@/components/AuthProvider';
 import { fetchModelGroupsByType, fetchVideoModelGroupsByAbility } from '@/lib/modelRegistry';
 import { fetchAppConfig, saveAppConfig } from '@/lib/workflowApi';
 import {
@@ -151,6 +153,7 @@ function isProviderOptions(options: Field['options']): options is ProviderGroup[
 }
 
 export default function SettingsPage() {
+  const { canEdit, public_mode } = useAuth();
   const [config, setConfig] = useState<ConfigTree>({});
   const [path, setPath] = useState('');
   const [loading, setLoading] = useState(true);
@@ -264,9 +267,12 @@ export default function SettingsPage() {
   };
 
   const updateSecretField = (field: Field, raw: string) => {
+    if (public_mode) return;
     setSecretDrafts(current => ({ ...current, [field.path]: raw }));
     setConfig(current => setValue(current, field.path, raw));
   };
+
+  if (!canEdit) return <div className="p-8 text-sm text-gray-500">展示模式下不可修改设置。</div>;
 
   return (
     <div className="min-h-screen bg-gray-50/50">
@@ -280,6 +286,7 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-500">
             修改后端配置并保存到 <span className="font-mono">{formatConfigPath(path)}</span>
           </p>
+          {public_mode && <p className="mt-2 text-xs text-blue-600">公网模式下 API Key 由服务器环境变量管理，此处只读。</p>}
         </div>
 
         {loading ? (
@@ -333,11 +340,12 @@ export default function SettingsPage() {
                         ) : field.type === 'password' ? (
                           <input
                             type="password"
+                            disabled={public_mode}
                             value={secretDrafts[field.path] ?? maskSecret(value)}
                             onFocus={event => event.currentTarget.select()}
                             onChange={event => updateSecretField(field, event.target.value)}
                             placeholder="输入新密钥覆盖"
-                            className="h-10 rounded-lg border border-gray-200 bg-white px-3 font-mono text-sm text-gray-700 outline-none focus:border-blue-300"
+                            className="h-10 rounded-lg border border-gray-200 bg-white px-3 font-mono text-sm text-gray-700 outline-none focus:border-blue-300 disabled:bg-gray-50"
                           />
                         ) : (
                           <input
@@ -404,6 +412,8 @@ export default function SettingsPage() {
                 {compatibleModels.length === 0 && <p className="text-xs text-gray-400">尚未添加兼容模型。</p>}
               </div>
             </section>
+
+            {public_mode && <InvitePanel />}
 
             <div className="sticky bottom-4 flex items-center gap-3 rounded-2xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
               {message && (

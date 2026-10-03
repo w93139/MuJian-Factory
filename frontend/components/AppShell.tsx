@@ -6,6 +6,7 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Clapperboard, Clock, Hexagon, 
 import clsx from 'clsx';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { clearTempCache, fetchPipelineTasks, fetchSandboxTasks, fetchSessions, type PipelineTask, type SandboxTask } from '@/lib/workflowApi';
+import { useAuth } from '@/components/AuthProvider';
 
 const NAV_ITEMS = [
   { href: '/', label: '幕间', icon: Home },
@@ -306,6 +307,7 @@ function SidebarTaskPanels({ currentPath }: { currentPath: string }) {
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { loading: authLoading, role, public_mode, canEdit, error: authError, refresh, logout } = useAuth();
   const [open, setOpen] = useState(true);
   const [settingsMenuOpen, setSettingsMenuOpen] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
@@ -313,6 +315,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setOpen(loadSidebarOpen());
   }, []);
+
+  useEffect(() => {
+    if (!authLoading && !authError && public_mode && role === 'anonymous' && pathname !== '/login') {
+      router.replace('/login');
+    }
+  }, [authLoading, authError, public_mode, role, pathname, router]);
 
   const setSidebarOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -331,6 +339,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       setClearingCache(false);
     }
   };
+
+  if (pathname === '/login') return <>{children}</>;
+  if (authError) {
+    return <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-red-600">
+      {authError}<button type="button" onClick={() => void refresh()} className="rounded-lg border px-3 py-2">重试</button>
+    </div>;
+  }
+  if (authLoading || (public_mode && role === 'anonymous')) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">正在验证访问权限…</div>;
+  }
 
   return (
     <div
@@ -374,7 +392,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
           <SidebarTaskPanels currentPath={pathname} />
           <div className="mj-sidebar-footer relative border-t border-gray-100 p-3">
-            {(() => {
+            {public_mode && <div className="mb-2 flex items-center justify-between gap-2 px-3 text-xs text-gray-500">
+              <span>{role === 'guest' ? '面试官' : '管理员'}</span>
+              <button type="button" onClick={() => void logout().then(() => router.replace('/login'))}
+                className="text-blue-600 hover:underline">退出</button>
+            </div>}
+            {canEdit && (() => {
               const Icon = SETTINGS_ITEM.icon;
               const active = pathname.startsWith(SETTINGS_ITEM.href);
               return (
@@ -450,6 +473,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         className="mj-main min-h-screen min-w-0 overflow-x-hidden transition-[margin] duration-300"
         style={{ marginLeft: open ? 'var(--app-sidebar-width)' : '0px' }}
       >
+        {public_mode && role === 'guest' && <div className="sticky top-0 z-20 border-b border-blue-100 bg-blue-50 px-5 py-2 text-center text-sm font-medium text-blue-700">展示模式：仅可浏览示例作品</div>}
         {children}
       </main>
     </div>

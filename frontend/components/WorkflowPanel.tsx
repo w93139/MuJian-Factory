@@ -19,6 +19,7 @@ import {
 } from '@/lib/workflowApi';
 import TopBar, { STAGES, type ModelConfig } from './TopBar';
 import HomePage, { type ProjectParams } from './HomePage';
+import { setSessionShowcase } from '@/lib/authApi';
 import {
   ScriptStage,
   CharacterStage,
@@ -44,6 +45,7 @@ const STAGE_COMPONENTS: Record<string, React.ComponentType<any>> = {
 interface HistoryItem {
   id: string;
   idea: string;
+  showcase?: boolean;
   style?: string;
   date: string;
   status: string;
@@ -270,6 +272,7 @@ export default function WorkflowPanel() {
           sessions.map((s: any) => ({
             id: s.id,
             idea: (s.title || s.idea || 'Untitled').slice(0, 60),
+            showcase: Boolean(s.showcase),
             style: s.style || '',
             date: s.date
               ? new Date(s.date * 1000).toLocaleDateString('zh-CN')
@@ -543,6 +546,7 @@ export default function WorkflowPanel() {
         {
           id: result.session_id,
           idea: params.idea.slice(0, 60),
+          showcase: false,
           style: params.style,
           date: new Date().toLocaleDateString('zh-CN'),
           status: 'running',
@@ -1222,6 +1226,11 @@ export default function WorkflowPanel() {
     setHistory(prev => prev.filter(h => h.id !== sid));
   };
 
+  const handleToggleShowcase = async (sid: string, showcase: boolean) => {
+    await setSessionShowcase(sid, showcase);
+    setHistory(current => current.map(item => item.id === sid ? { ...item, showcase } : item));
+  };
+
   // ── 模型配置变更处理 ──
   const handleModelConfigChange = (config: ModelConfig) => {
     setProjectParams(prev => prev ? { ...prev, ...config } : null);
@@ -1395,6 +1404,7 @@ export default function WorkflowPanel() {
             onStartProject={handleStartProject}
             onResumeProject={handleResumeProject}
             onDeleteSession={handleDeleteSession}
+            onToggleShowcase={handleToggleShowcase}
             history={history}
           />
         ) : (

@@ -3,11 +3,10 @@
  */
 
 /**
- * Streaming endpoints must bypass the Next.js rewrite proxy because it buffers
- * the entire upstream response before forwarding, which breaks SSE real-time delivery.
- * Non-streaming endpoints can still go through the proxy (relative URL).
+ * Production streams use the same origin so signed cookies reach Nginx and the API.
+ * A separate URL can be configured for local development when needed.
  */
-const STREAM_API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const STREAM_API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
 export interface StageInfo {
   id: string;
@@ -199,6 +198,13 @@ export async function fetchSandboxTasks(): Promise<SandboxTask[]> {
   if (!resp.ok) return [];
   const data = await resp.json();
   return data.tasks || [];
+}
+
+export async function fetchSandboxHistory(): Promise<Array<Record<string, unknown>>> {
+  const response = await fetch('/api/sandbox/history');
+  await requireOkResponse(response, '历史记录加载失败');
+  const data = await response.json();
+  return data.records || [];
 }
 
 export async function clearTempCache(): Promise<{ status: string; deleted: number; freed_bytes?: number; freed_mb?: number; errors?: Array<{ path: string; error: string }> }> {

@@ -46,6 +46,7 @@ import {
   type ProviderGroup,
 } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
+import ErrorDetails from '@/components/ErrorDetails';
 
 type PipelineId = 'standard' | 'action_transfer' | 'digital_human';
 
@@ -457,6 +458,8 @@ function TaskResult({ task }: { task: PipelineTask | null }) {
           style={{ width: `${progress}%` }}
         />
       </div>
+
+      <ErrorDetails error={task.error} className="mb-4" />
 
       <FinalVideoResult item={finalVideoArtifact} />
 

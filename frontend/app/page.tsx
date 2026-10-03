@@ -2,6 +2,8 @@
 
 import { Suspense } from 'react';
 import WorkflowPanel from '@/components/WorkflowPanel';
+import ShowcaseBrowser from '@/components/ShowcaseBrowser';
+import { useAuth } from '@/components/AuthProvider';
 
 function Loading() {
   return (
@@ -15,10 +17,10 @@ function Loading() {
 }
 
 export default function Home() {
+  const { canEdit } = useAuth();
   return (
     <Suspense fallback={<Loading />}>
-      <WorkflowPanel />
+      {canEdit ? <WorkflowPanel /> : <ShowcaseBrowser />}
     </Suspense>
   );
 }
-
