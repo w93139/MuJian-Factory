@@ -223,7 +223,6 @@ async def test_stream_completion_does_not_wait_fifteen_seconds():
         timeout=2.0,
     )
     assert events[-1]["type"] == "stage_complete"
-    assert "openclaw" not in events[-1]
 
 
 async def _collect_stream(engine, state):

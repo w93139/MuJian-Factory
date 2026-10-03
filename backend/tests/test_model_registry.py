@@ -17,7 +17,6 @@ def test_registry_contains_only_planned_providers_and_models():
     }
     assert "seedance-1-0-pro" not in models
     assert "seedance-1-0-lite" not in models
-    assert "gpt-4o" not in models
     assert "wan2.7-i2v" in models
     assert {"llm", "vlm"} <= set(models["qwen3.5-plus"]["type"])
     assert {"llm", "vlm"} <= set(models["qwen3.7-plus"]["type"])

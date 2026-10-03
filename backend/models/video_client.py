@@ -68,8 +68,6 @@ class VideoClient:
         prompt_extend: Optional[bool] = None,
         watermark: Optional[bool] = None,
         seed: Optional[int] = None,
-        mode: str = "pro",
-        cfg_scale: float = 0.5,
         generate_audio: Optional[bool] = None,
         audio: Optional[bool] = None,
     ) -> str:
@@ -316,8 +314,6 @@ def _build_cli_parser():
     parser.add_argument("--prompt-extend", choices=["true", "false"])
     parser.add_argument("--watermark", choices=["true", "false"])
     parser.add_argument("--seed", type=int)
-    parser.add_argument("--mode", default="pro", help="Kling mode fallback: std/pro.")
-    parser.add_argument("--cfg-scale", type=float, default=0.5)
     parser.add_argument("--generate-audio", choices=["true", "false"])
     parser.add_argument("--audio-enabled", choices=["true", "false"], help="Pass DashScope audio boolean for supported models.")
     return parser
@@ -365,8 +361,6 @@ def _cli_generate(args) -> str:
         prompt_extend=_str_to_bool(args.prompt_extend),
         watermark=_str_to_bool(args.watermark),
         seed=args.seed,
-        mode=args.mode,
-        cfg_scale=args.cfg_scale,
         generate_audio=_str_to_bool(args.generate_audio),
         audio=_str_to_bool(args.audio_enabled),
     )
