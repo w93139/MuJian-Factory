@@ -42,12 +42,46 @@ def test_local_mode_keeps_existing_routes_open(monkeypatch):
         assert client.get("/api/sessions").status_code == 200
 
 
+def test_public_static_files_reject_traversal_and_data_for_every_role(public_client, tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    result_dir = tmp_path / "result"
+    data_dir.mkdir()
+    result_dir.mkdir()
+    (data_dir / "invites.json").write_text('{"secret":"private"}', encoding="utf-8")
+    (result_dir / "showcase.mp4").write_bytes(b"media")
+    static_mount = next(route for route in app.routes if getattr(route, "path", None) == "/code")
+    monkeypatch.setattr(static_mount.app, "directory", str(tmp_path))
+    monkeypatch.setattr(static_mount.app, "all_directories", [str(tmp_path)])
+
+    paths = [
+        "/code/data/invites.json",
+        "/code/result/../data/invites.json",
+        "/code/result/%2e%2e/data/invites.json",
+        "/code/result/%2E%2e/data/invites.json",
+        "/code/result/..%2fdata/invites.json",
+    ]
+    for path in paths:
+        assert public_client.get(path).status_code in {401, 404}
+
+    assert public_client.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 200
+    for path in paths:
+        assert public_client.get(path).status_code == 404
+    assert public_client.get("/code/result/showcase.mp4").content == b"media"
+
+    public_client.post("/api/auth/logout")
+    invite = auth.create_invite()
+    assert public_client.post("/api/auth/login", json={"invite_code": invite["code"]}).status_code == 200
+    for path in paths:
+        assert public_client.get(path).status_code == 404
+    assert public_client.get("/code/result/showcase.mp4").content == b"media"
+
+
 def test_roles_invites_revocation_and_static_secret_protection(public_client):
     client = public_client
     assert client.get("/api/health").status_code == 200
     assert client.get("/api/auth/me").json() == {"role": "anonymous", "public_mode": True}
     assert client.get("/api/sessions").status_code == 401
-    assert client.get("/code/data/invites.json").status_code == 401
+    assert client.get("/code/data/invites.json").status_code == 404
 
     login = client.post("/api/auth/login", json={"password": "admin-test-password"})
     assert login.status_code == 200
@@ -73,7 +107,7 @@ def test_roles_invites_revocation_and_static_secret_protection(public_client):
     assert client.get("/api/stages").status_code == 200
     assert client.post("/api/project/start", json={"idea": "scene"}).status_code == 403
     assert client.get("/api/admin/invites").status_code == 403
-    assert client.get("/code/data/invites.json").status_code == 403
+    assert client.get("/code/data/invites.json").status_code == 404
 
     admin_client = TestClient(app)
     admin_client.post("/api/auth/login", json={"password": "admin-test-password"})
