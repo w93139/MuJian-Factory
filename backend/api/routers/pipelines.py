@@ -22,6 +22,7 @@ from pipelines.events import task_event_stream
 from pipelines.runner import PIPELINE_REGISTRY, run_pipeline_task
 from pipelines.storage import create_task, delete_task, list_tasks, load_task
 from pipelines.utils import TEMPLATE_FIELD_DEFAULTS, template_custom_fields, template_media_spec
+from quick_demo import quick_demo_video_model
 
 router = APIRouter(tags=["Pipelines"])
 
@@ -184,7 +185,8 @@ async def get_api_models(
                 "capabilities": capabilities,
             })
         return {
-            "models": models
+            "models": models,
+            **({"quick_demo_video_model": quick_demo_video_model()} if model_type == "video" else {}),
         }
 
     required = [ability] if ability else None

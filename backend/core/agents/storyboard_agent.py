@@ -853,6 +853,7 @@ class StoryboardAgent(AgentInterface):
         llm_model: str,
         sid: str,
         progress_note: Optional[Callable[[str], None]] = None,
+        target_duration_seconds: Optional[int] = None,
     ) -> List[dict]:
         annotated_script, units = self._annotate_episode_script(ep_c, characters, settings)
         if not units:
@@ -864,6 +865,9 @@ class StoryboardAgent(AgentInterface):
         plans = await self._plan_episode_segments(ep_n, ep_t, annotated_script, units, characters, settings, llm_model, sid)
         if not plans:
             raise Exception(f"第 {ep_n} 集片段规划失败")
+        if target_duration_seconds is not None:
+            max_segments = min(3, max(1, target_duration_seconds // self.MIN_SEGMENT_DURATION))
+            plans = plans[:max_segments]
 
         logger.info("[Storyboard] Episode %s planned %d segments; designing in parallel", ep_n, len(plans))
         if progress_note:
@@ -878,7 +882,30 @@ class StoryboardAgent(AgentInterface):
         if progress_note:
             progress_note(f"第 {ep_n} 集正在检查人物站位连续性")
         segments = await self._fix_episode_staging_continuity(ep_n, ep_t, segments, llm_model, sid)
+        if target_duration_seconds is not None:
+            segments = self._fit_short_film_segments(segments, target_duration_seconds)
         return segments
+
+    @classmethod
+    def _fit_short_film_segments(cls, segments: List[dict], target_seconds: int) -> List[dict]:
+        """Bound paid video duration after the creative storyboard is complete."""
+        selected = segments[:min(3, max(1, target_seconds // cls.MIN_SEGMENT_DURATION))]
+        if not selected:
+            return []
+        duration = max(len(selected) * cls.MIN_SEGMENT_DURATION, min(target_seconds, len(selected) * cls.MAX_SEGMENT_DURATION))
+        base, remainder = divmod(duration, len(selected))
+        for index, segment in enumerate(selected):
+            allotted = base + (1 if index < remainder else 0)
+            shots = segment.get("shots", [])[:max(1, allotted // cls.MIN_SHOT_DURATION)]
+            if not shots:
+                raise ValueError("短片分镜片段没有镜头")
+            for shot_index, shot in enumerate(shots, 1):
+                shot["shot_number"] = shot_index
+                shot["duration"] = cls.MIN_SHOT_DURATION
+            shots[-1]["duration"] += allotted - len(shots) * cls.MIN_SHOT_DURATION
+            segment["shots"] = shots
+            segment["total_duration"] = allotted
+        return selected
 
     @classmethod
     def _estimate_duration(cls, text: str, is_dialogue: bool) -> int:
@@ -1243,6 +1270,7 @@ class StoryboardAgent(AgentInterface):
         if not llm_model:
             raise ValueError("Missing required model configuration: llm_model")
         style = input_data.get("style") or session_meta.get("style") or "anime"
+        target_duration_seconds = input_data.get("target_duration_seconds") or session_meta.get("target_duration_seconds")
         
         # 处理人工干预/修改
         if intervention and "modified_storyboard" in intervention:
@@ -1309,6 +1337,7 @@ class StoryboardAgent(AgentInterface):
                 llm_model,
                 sid,
                 progress_note=report_storyboard_note,
+                target_duration_seconds=target_duration_seconds,
             )
 
             return {

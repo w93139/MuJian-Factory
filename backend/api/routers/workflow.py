@@ -13,6 +13,7 @@ from api.services.project_helpers import (
 )
 from config import settings
 from core.orchestrator import STAGE_ORDER, WorkflowStage
+from quick_demo import quick_demo_video_model
 
 router = APIRouter(tags=["Workflow"])
 
@@ -56,7 +57,13 @@ def _require_model_fields(values: dict) -> None:
 @router.post("/api/project/start")
 async def start_project(req: ProjectStartRequest):
     final_idea = merge_uploaded_file_into_idea(req.idea, req.file_path)
-    _require_model_fields(req.model_dump())
+    quick_demo = req.target_duration_seconds is not None
+    demo_model = quick_demo_video_model() if quick_demo else None
+    model_values = req.model_dump()
+    if demo_model:
+        model_values["video_generation_mode"] = "first_frame"
+        model_values["video_first_frame_model"] = demo_model
+    _require_model_fields(model_values)
 
     session_id = uuid.uuid4().hex
     meta = {
@@ -64,19 +71,20 @@ async def start_project(req: ProjectStartRequest):
         "user_textbox_input": req.idea,
         "style": req.style or getattr(settings, "STYLE", None) or "realistic",
         "video_ratio": req.video_ratio or "9:16",
-        "video_resolution": req.video_resolution or "720P",
+        "video_resolution": "720P" if quick_demo else (req.video_resolution or "720P"),
         "expand_idea": req.expand_idea if req.expand_idea is not None else True,
         "llm_model": req.llm_model,
         "vlm_model": req.vlm_model,
         "image_t2i_model": req.image_t2i_model,
         "image_it2i_model": req.image_it2i_model,
-        "video_first_frame_model": req.video_first_frame_model or getattr(settings, "VIDEO_FIRST_FRAME_MODEL", ""),
+        "video_first_frame_model": demo_model or req.video_first_frame_model or getattr(settings, "VIDEO_FIRST_FRAME_MODEL", ""),
         "video_start_end_model": req.video_start_end_model or getattr(settings, "VIDEO_START_END_MODEL", ""),
         "video_reference_model": req.video_reference_model or getattr(settings, "VIDEO_REFERENCE_MODEL", ""),
-        "video_generation_mode": req.video_generation_mode or getattr(settings, "VIDEO_GENERATION_MODE", "first_frame"),
+        "video_generation_mode": "first_frame" if quick_demo else (req.video_generation_mode or getattr(settings, "VIDEO_GENERATION_MODE", "first_frame")),
         "enable_concurrency": req.enable_concurrency if req.enable_concurrency is not None else True,
         "web_search": req.web_search if req.web_search is not None else False,
-        "episodes": req.episodes if req.episodes is not None else 4,
+        "episodes": 1 if quick_demo else (req.episodes if req.episodes is not None else 4),
+        "target_duration_seconds": req.target_duration_seconds,
     }
     session = workflow_engine.create_session(session_id, meta)
 
@@ -96,6 +104,7 @@ async def start_project(req: ProjectStartRequest):
             "video_reference_model": meta["video_reference_model"],
             "video_generation_mode": meta["video_generation_mode"],
             "episodes": meta["episodes"],
+            "target_duration_seconds": meta["target_duration_seconds"],
             "video_ratio": meta["video_ratio"],
             "video_resolution": meta["video_resolution"],
         }

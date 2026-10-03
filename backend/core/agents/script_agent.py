@@ -29,6 +29,16 @@ class ScriptWriterAgent(AgentInterface):
         super().__init__(name="ScriptWriter")
 
     @staticmethod
+    def _short_film_idea(idea: str, target_duration_seconds: int | None) -> str:
+        if target_duration_seconds is None:
+            return idea
+        return (
+            f"{idea}\n\n快速演示约束：写成一集完整的短片，目标总时长约"
+            f"{target_duration_seconds} 秒，只安排 3 个主要画面片段。"
+            "人物与场景尽量精简；结尾要有清楚的收束，不展开连续剧剧情。"
+        )
+
+    @staticmethod
     def _extract_json_from_text(text: str) -> Optional[Any]:
         try:
             return extract_json(text)
@@ -419,7 +429,11 @@ class ScriptWriterAgent(AgentInterface):
 
             # 1. Generate full script
             _log_progress(10, "正在生成完整剧本文本初稿...")
-            prompt = _get_script_prompt("generate_script", "zh" if is_zh else "en").format(idea=idea, style=style, episodes=episodes)
+            prompt = _get_script_prompt("generate_script", "zh" if is_zh else "en").format(
+                idea=self._short_film_idea(idea, input_data.get("target_duration_seconds")),
+                style=style,
+                episodes=episodes,
+            )
 
             full_script_text = await loop.run_in_executor(None, self._cancellable_query, llm, prompt, [], llm_model, True, sid, web_search)
             logger.info(f"[ScriptWriter] Initial script generated ({len(full_script_text)} chars)")

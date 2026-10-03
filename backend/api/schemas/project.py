@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ProjectStartRequest(BaseModel):
@@ -21,6 +21,7 @@ class ProjectStartRequest(BaseModel):
     enable_concurrency: Optional[bool] = True
     web_search: Optional[bool] = False
     episodes: Optional[int] = None
+    target_duration_seconds: Optional[int] = Field(default=None, ge=10, le=45)
 
 
 class InterventionRequest(BaseModel):
