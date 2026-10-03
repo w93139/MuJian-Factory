@@ -73,18 +73,15 @@ class VideoDirectorAgent(AgentInterface):
                       reference_image_paths: Optional[List[str]] = None) -> tuple:
         """生成单个视频片段，返回 (segment_id, path_or_None)"""
         if self.cancellation_check and self.cancellation_check():
-            logger.info(f"VideoDirectorAgent: {segment_id} 跳过（用户取消）")
-            return segment_id, None
+            raise RuntimeError(f"{segment_id} 已取消")
 
         reference_image_paths = reference_image_paths or []
         if video_generation_mode == "reference":
             missing_refs = [path for path in reference_image_paths if not os.path.exists(path)]
             if not reference_image_paths or missing_refs:
-                logger.warning("Reference images missing for %s: %s", segment_id, missing_refs or reference_image_paths)
-                return segment_id, None
+                raise FileNotFoundError(f"{segment_id} 缺少参考图：{missing_refs or reference_image_paths}")
         elif not img_path or not os.path.exists(img_path):
-            logger.warning(f"Image missing for {segment_id}: {img_path}")
-            return segment_id, None
+            raise FileNotFoundError(f"{segment_id} 缺少首帧图：{img_path}")
 
         save_path = self._next_version_path(sid, segment_id)
         try:
@@ -111,7 +108,7 @@ class VideoDirectorAgent(AgentInterface):
                     os.remove(save_path)
                 except Exception:
                     pass
-        return segment_id, None
+            raise
 
     # ─── 提示词组装 ───
 
@@ -351,7 +348,8 @@ class VideoDirectorAgent(AgentInterface):
             })
         return preview
 
-    def _build_payload(self, sid: str, segments: list, video_clips: Optional[list] = None) -> dict:
+    def _build_payload(self, sid: str, segments: list, video_clips: Optional[list] = None,
+                       errors: Optional[dict[str, str]] = None) -> dict:
         clips = []
         clip_map = {c.get("id"): c for c in (video_clips or []) if isinstance(c, dict) and c.get("id")}
         for idx, seg in enumerate(segments, 1):
@@ -359,6 +357,7 @@ class VideoDirectorAgent(AgentInterface):
             versions = self._list_versions(sid, segment_id)
             ep_n = seg.get('episode_number', 1)
             seg_n = seg.get('segment_number', idx)
+            error = (errors or {}).get(segment_id) or clip_map.get(segment_id, {}).get("error", "")
             clips.append({
                 "id": segment_id,
                 "name": f"第{ep_n}集-片段{seg_n}",
@@ -369,6 +368,7 @@ class VideoDirectorAgent(AgentInterface):
                 "selected": versions[-1] if versions else "",
                 "versions": versions,
                 "status": "done" if versions else "failed",
+                "error": "" if versions else error,
             })
         return {
             "payload": {
@@ -385,8 +385,6 @@ class VideoDirectorAgent(AgentInterface):
     # ─── 核心流程 ───
 
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
-        from config import settings
-        
         input_data = self._merge_session_params(input_data)
         sid = input_data["session_id"]
         
@@ -431,6 +429,7 @@ class VideoDirectorAgent(AgentInterface):
             raise Exception("未找到分镜片段数据，请先完成阶段3")
         
         video_clips = artifacts.get('video_generation', {}).get('clips', [])
+        generation_errors: dict[str, str] = {}
 
         # 2. 获取参考图路径映射 (从 Reference Generation)
         ref_art = artifacts.get('reference_generation', {})
@@ -439,18 +438,6 @@ class VideoDirectorAgent(AgentInterface):
         character_art = artifacts.get('character_design', {})
         
         style_zh = input_data.get('style') or session_meta.get('style') or 'realistic'
-        # 简单映射为中文显示名
-        style_map_zh = {
-            "anime": "动漫",
-            "realistic": "写实",
-            "cartoon": "卡通",
-            "3d-disney": "3D迪斯尼",
-            "oil-painting": "油画",
-            "chinese-ink": "国画",
-            "comic-book": "美漫",
-            "cyberpunk": "赛博朋克"
-        }
-        style_name = style_map_zh.get(style_zh, style_zh)
         style_prompt = self._get_style_prompt(style_zh)
 
         # ═══ 介入：重新生成指定片段 ═══
@@ -468,7 +455,8 @@ class VideoDirectorAgent(AgentInterface):
                         for seg_id in regen_ids:
                             seg = segment_map.get(seg_id)
                             clip = clip_map.get(seg_id) if clip_map.get(seg_id) else None
-                            if not seg: continue
+                            if not seg:
+                                continue
                             prompt = self._assemble_prompt(seg, style_prompt, character_art, video_data=clip)
 
                             reference_image_paths = None
@@ -505,6 +493,7 @@ class VideoDirectorAgent(AgentInterface):
                                 _, res_path = fut.result()
                             except Exception as e:
                                 logger.error(f"Regen future error for {sid_done}: {e}")
+                                generation_errors[sid_done] = str(e)
                                 res_path = None
                             done += 1
                             pct = 5 + int(90 * done / max(1, len(regen_ids)))
@@ -523,6 +512,7 @@ class VideoDirectorAgent(AgentInterface):
                                     "asset_complete": {
                                         "type": "clips", "id": sid_done,
                                         "status": "failed",
+                                        "error": generation_errors.get(sid_done, "视频生成没有返回文件"),
                                         "selected": "", "versions": [],
                                     }
                                 })
@@ -532,7 +522,7 @@ class VideoDirectorAgent(AgentInterface):
                 # 同步到 session artifacts
                 self._update_session_video_data(sid, segments, style_prompt)
                 
-                return self._build_payload(sid, segments, video_clips)
+                return self._build_payload(sid, segments, video_clips, generation_errors)
 
         # ═══ 正常流程：全量生成 ═══
         self._report_progress("视频生成", "正在准备数据...", 2)
@@ -544,7 +534,8 @@ class VideoDirectorAgent(AgentInterface):
             for seg_index, seg in enumerate(segments):
                 seg_id = seg["segment_id"]
                 existing = self._list_versions(sid, seg_id)
-                if existing: continue
+                if existing:
+                    continue
                 prompt = self._assemble_prompt(seg, style_prompt, character_art)
                 reference_image_paths = None
                 if video_generation_mode == "reference":
@@ -586,6 +577,7 @@ class VideoDirectorAgent(AgentInterface):
                         _, res_path = fut.result()
                     except Exception as e:
                         logger.error(f"Video future error for {sid_done}: {e}")
+                        generation_errors[sid_done] = str(e)
                         res_path = None
                     done += 1
                     pct = 5 + int(90 * done / max(1, len(tasks)))
@@ -604,12 +596,14 @@ class VideoDirectorAgent(AgentInterface):
                             "asset_complete": {
                                 "type": "clips", "id": sid_done,
                                 "status": "failed",
+                                "error": generation_errors.get(sid_done, "视频生成没有返回文件"),
                                 "selected": "", "versions": [],
                             }
                         })
                     if self.cancellation_check and self.cancellation_check():
                         for f in futs:
-                            if not f.done(): f.cancel()
+                            if not f.done():
+                                f.cancel()
                         break
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, run)
@@ -618,4 +612,4 @@ class VideoDirectorAgent(AgentInterface):
         self._update_session_video_data(sid, segments, style_prompt)
         
         self._report_progress("视频生成", "完成", 100)
-        return self._build_payload(sid, segments, video_clips)
+        return self._build_payload(sid, segments, video_clips, generation_errors)

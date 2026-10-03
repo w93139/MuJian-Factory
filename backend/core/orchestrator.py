@@ -868,6 +868,10 @@ class WorkflowEngine:
                             item.get("versions"),
                             asset_update.get("versions"),
                         )
+                    if "error" in asset_update:
+                        item["error"] = asset_update["error"]
+                    elif next_status == "done":
+                        item.pop("error", None)
                     return
 
             items.append({
@@ -875,6 +879,7 @@ class WorkflowEngine:
                 "status": asset_update.get("status", "done"),
                 "selected": asset_update.get("selected", ""),
                 "versions": asset_update.get("versions", []),
+                "error": asset_update.get("error", ""),
             })
 
         def wrapped_progress_callback(phase: str, step: str, percent: float, data: dict = None):
