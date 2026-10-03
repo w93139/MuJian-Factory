@@ -43,6 +43,17 @@ class ReferenceGeneratorAgent(AgentInterface):
     def __init__(self):
         super().__init__(name="ReferenceGenerator")
 
+    @staticmethod
+    def _named_ids(items: List[Dict[str, Any]], id_keys: tuple[str, str], kind: str) -> Dict[str, str]:
+        named_ids = {}
+        for item in items:
+            name = item.get("name")
+            if not name:
+                logger.warning("参考图素材缺少名称，跳过%s：%s", kind, item)
+                continue
+            named_ids[name] = item.get(id_keys[0]) or item.get(id_keys[1]) or ""
+        return named_ids
+
     # ─── 版本管理 ───
 
     @staticmethod
@@ -562,7 +573,7 @@ class ReferenceGeneratorAgent(AgentInterface):
         
         style = input_data.get("style", "anime")
         video_ratio = input_data.get("video_ratio", "16:9")
-        resolution = input_data.get("resolution", "2K")
+        resolution = input_data.get("video_resolution") or settings.VIDEO_RESOLUTION
         llm_model = self._require_input(input_data, "llm_model")
         t2i = self._require_input(input_data, "image_t2i_model")
         it2i = self._require_input(input_data, "image_it2i_model")
@@ -623,15 +634,12 @@ class ReferenceGeneratorAgent(AgentInterface):
         is_zh = any('\u4e00' <= c <= '\u9fff' for c in script_json.get("title", ""))
 
         # 构建 name → id 映射（用于素材匹配）
-        char_id_map = {}
-        for c in character_json.get('characters', []):
-            chara_id = c.get('id') or c.get('character_id') or ''
-            char_id_map[c['name']] = chara_id
-
-        setting_id_map = {}
-        for s in character_json.get('settings', []):
-            set_id = s.get('id') or s.get('setting_id') or ''
-            setting_id_map[s['name']] = set_id
+        char_id_map = self._named_ids(
+            character_json.get('characters', []), ('id', 'character_id'), '角色'
+        )
+        setting_id_map = self._named_ids(
+            character_json.get('settings', []), ('id', 'setting_id'), '场景'
+        )
 
         asset_map = self._build_asset_map(character_json)
 
