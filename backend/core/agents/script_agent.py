@@ -229,7 +229,6 @@ class ScriptWriterAgent(AgentInterface):
             episodes_to_add = intervention.get("episodes_to_add", 1)
             sequel_idea = intervention.get("sequel_idea", "").strip()
 
-            from config import settings as app_settings
             from models.llm_client import LLM
             llm = LLM()
 
@@ -242,6 +241,8 @@ class ScriptWriterAgent(AgentInterface):
             existing_episodes_text = json.dumps(input_data.get("episodes", []), ensure_ascii=False)
             existing_chars_text = json.dumps(input_data.get("characters", []), ensure_ascii=False)
             existing_settings_text = json.dumps(input_data.get("settings", []), ensure_ascii=False)
+            language_sample = f"{input_data.get('title', '')} {existing_episodes_text}"
+            is_zh = any('\u4e00' <= char <= '\u9fff' for char in language_sample)
             
             last_episode_num = 0
             if input_data.get("episodes"):
@@ -354,7 +355,6 @@ class ScriptWriterAgent(AgentInterface):
             final_data["new_settings"] = new_settings
             final_data["sequel_idea"] = sequel_idea
             
-            is_zh = any('\u4e00' <= c <= '\u9fff' for c in final_data.get("title", "Generated Script"))
             self._save_result(final_data, sid, is_zh)
             _log_progress(100, "智能续写完成")
             return final_data
@@ -482,9 +482,6 @@ class ScriptWriterAgent(AgentInterface):
                 c["character_id"] = c.get("character_id") or self._gen_id("char")
             for s in all_settings:
                 s["setting_id"] = s.get("setting_id") or self._gen_id("set")
-
-            asset_chars_str = json.dumps([{"name": c.get("name"), "description": c.get("description"), "role": c.get("role")} for c in all_characters], ensure_ascii=False)
-            asset_sets_str = json.dumps([{"name": s.get("name"), "description": s.get("description")} for s in all_settings], ensure_ascii=False)
 
             # 3. 解析各集数据 - 针对新版数组输出格式进行优化
             _log_progress(80, "开始结构化全集数据...")
