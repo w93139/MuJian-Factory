@@ -14,7 +14,7 @@ import {
 } from '@/config/models';
 import { STAGES } from './TopBar';
 import { fetchModelGroupsByType, fetchVideoModelGroupsByAbility } from '@/lib/modelRegistry';
-import { fetchAppConfig } from '@/lib/workflowApi';
+import { fetchAppConfig, fetchQuickDemoVideoModel } from '@/lib/workflowApi';
 
 export interface ProjectParams {
   idea: string;
@@ -34,6 +34,7 @@ export interface ProjectParams {
   enable_concurrency?: boolean;
   web_search?: boolean;
   episodes?: number;
+  target_duration_seconds?: number;
 }
 
 interface HistoryItem {
@@ -97,6 +98,8 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
   const [webSearch, setWebSearch] = useState(false);
   const [episodes, setEpisodes] = useState(4);
   const [showEpisodesPanel, setShowEpisodesPanel] = useState(false);
+  const [quickDemoModel, setQuickDemoModel] = useState('');
+  const [quickDemoError, setQuickDemoError] = useState('');
 
   // 上传相关状态
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,6 +127,13 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
         : selectedFirstFrameVideo;
   const modelConfigReady = Boolean(selectedLLM && selectedVLM && selectedT2I && selectedI2I && activeVideoModel && selectedRatio && selectedResolution);
   const canStart = Boolean((idea.trim() || uploadedFile) && modelConfigReady && !configLoading);
+  const canQuickStart = Boolean((idea.trim() || uploadedFile) && selectedLLM && selectedVLM && selectedT2I && selectedI2I && selectedRatio && quickDemoModel && !configLoading);
+
+  useEffect(() => {
+    fetchQuickDemoVideoModel().then(setQuickDemoModel).catch(cause =>
+      setQuickDemoError(cause instanceof Error ? cause.message : '快速演示模型读取失败')
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,25 +233,26 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
 
   const selectedVideoModeLabel = VIDEO_GENERATION_MODES.find(item => item.id === selectedVideoMode)?.label || '首帧生视频';
 
-  const handleStart = (auto?: boolean) => {
-    if (!canStart) return;
+  const handleStart = (auto?: boolean, quickDemo = false) => {
+    if (quickDemo ? !canQuickStart : !canStart) return;
     onStartProject({
       idea,
       file_path: uploadedFile?.path, // 如果上传了文件，传给后端
       style: selectedStyle,
       video_ratio: selectedRatio,
-      video_resolution: selectedResolution,
+      video_resolution: quickDemo ? '720P' : selectedResolution,
       llm_model: selectedLLM,
       vlm_model: selectedVLM,
       image_t2i_model: selectedT2I,
       image_it2i_model: selectedI2I,
-      video_generation_mode: selectedVideoMode,
-      video_first_frame_model: selectedFirstFrameVideo,
+      video_generation_mode: quickDemo ? 'first_frame' : selectedVideoMode,
+      video_first_frame_model: quickDemo ? quickDemoModel : selectedFirstFrameVideo,
       video_start_end_model: selectedStartEndVideo,
       video_reference_model: selectedReferenceVideo,
       enable_concurrency: enableConcurrency,
       web_search: webSearch,
-      episodes,
+      episodes: quickDemo ? 1 : episodes,
+      ...(quickDemo ? { target_duration_seconds: 30 } : {}),
     }, auto);
   };
 
@@ -302,9 +313,14 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
           <div className="inline-flex items-center gap-2 mb-3">
             <h1 className="text-2xl font-medium text-white">Hi，和幕间一起聊聊创作想法</h1>
           </div>
-          <p className="text-sm text-white/75">
-            从一句灵感开始，让 AI 陪你完成整部短片
-          </p>
+          <p className="text-sm text-white/75">幕间把一句创意变成可浏览、可编辑的 AI 短片创作流程。</p>
+        </div>
+
+        <div aria-label="六阶段创作流程" className="mb-6 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-500">
+          {STAGES.map((stage, index) => <React.Fragment key={stage.id}>
+            {index > 0 && <ArrowRight aria-hidden="true" className="h-3 w-3 text-gray-400" />}
+            <span className="rounded-full border border-gray-200 bg-white px-3 py-1.5">{stage.shortName}</span>
+          </React.Fragment>)}
         </div>
 
         {/* 输入区域 */}
@@ -482,6 +498,14 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
               {configError || '正在读取默认模型……'}
             </div>
           )}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => handleStart(true, true)} disabled={!canQuickStart}
+              className={clsx('rounded-xl px-4 py-2 text-sm font-medium transition-colors', canQuickStart ? 'bg-blue-600 text-white hover:bg-blue-700' : 'cursor-not-allowed bg-gray-100 text-gray-400')}>
+              快速演示（约 30 秒成片）
+            </button>
+            <span className="text-xs text-gray-500">单项目 · 1 集 · 720P · 自动执行</span>
+            {quickDemoError && <span role="status" className="text-xs text-amber-600">{quickDemoError}</span>}
+          </div>
 
           {/* 模型设置折叠面板 */}
           {showSettings && (

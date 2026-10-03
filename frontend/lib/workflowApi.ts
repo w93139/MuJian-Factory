@@ -238,6 +238,16 @@ export async function fetchApiModels(params: {
   return data.models || [];
 }
 
+export async function fetchQuickDemoVideoModel(): Promise<string> {
+  const response = await fetch('/api/models?model_type=video');
+  await requireOkResponse(response, '读取快速演示模型失败');
+  const data = await response.json();
+  if (typeof data.quick_demo_video_model !== 'string' || !data.quick_demo_video_model) {
+    throw new Error('当前没有可用的快速演示视频模型');
+  }
+  return data.quick_demo_video_model;
+}
+
 export async function fetchStandardTemplates(): Promise<StandardTemplateOption[]> {
   const resp = await fetch('/api/pipelines/standard/templates');
   if (!resp.ok) throw new Error('获取模版列表失败');
@@ -320,6 +330,7 @@ export async function startProject(params: {
   web_search?: boolean;
   expand_idea?: boolean;
   episodes?: number;
+  target_duration_seconds?: number;
 }): Promise<{ session_id: string; status: string; params: any }> {
   const resp = await fetch('/api/project/start', {
     method: 'POST',

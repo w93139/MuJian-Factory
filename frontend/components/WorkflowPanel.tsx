@@ -538,6 +538,7 @@ export default function WorkflowPanel() {
         web_search: params.web_search,
         expand_idea: params.expand_idea,
         episodes: params.episodes,
+        target_duration_seconds: params.target_duration_seconds,
       });
       setSessionId(result.session_id);
 
@@ -574,6 +575,7 @@ export default function WorkflowPanel() {
         enable_concurrency: params.enable_concurrency,
         web_search: params.web_search,
         episodes: params.episodes,
+        target_duration_seconds: params.target_duration_seconds,
         auto_mode: useAutoMode,
       };
 
@@ -657,6 +659,7 @@ export default function WorkflowPanel() {
           video_reference_model: projectParams?.video_reference_model,
           video_ratio: projectParams?.video_ratio,
           video_resolution: projectParams?.video_resolution,
+          target_duration_seconds: projectParams?.target_duration_seconds,
           video_sound: 'on',
           video_shot_type: 'multi',
         };
@@ -753,6 +756,7 @@ export default function WorkflowPanel() {
       style: projectParams?.style,
       video_ratio: projectParams?.video_ratio,
       video_resolution: projectParams?.video_resolution,
+      target_duration_seconds: projectParams?.target_duration_seconds,
       llm_model: projectParams?.llm_model,
       vlm_model: projectParams?.vlm_model,
       image_t2i_model: projectParams?.image_t2i_model,
@@ -1062,6 +1066,7 @@ export default function WorkflowPanel() {
         video_reference_model: projectParams?.video_reference_model,
         video_ratio: projectParams?.video_ratio,
         video_resolution: projectParams?.video_resolution,
+        target_duration_seconds: projectParams?.target_duration_seconds,
       };
 
       // 尝试获取场景数
@@ -1181,6 +1186,8 @@ export default function WorkflowPanel() {
           video_first_frame_model: restoredFirstFrameVideoModel,
           video_start_end_model: restoredStartEndModel,
           video_reference_model: restoredReferenceModel,
+          episodes: s.episodes,
+          target_duration_seconds: s.target_duration_seconds,
           expand_idea: s.expand_idea || false,
           enable_concurrency: s.enable_concurrency || false,
           web_search: s.web_search || false,
