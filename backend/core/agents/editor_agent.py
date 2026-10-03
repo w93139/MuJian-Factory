@@ -25,6 +25,45 @@ class VideoEditorAgent(AgentInterface):
     def __init__(self):
         super().__init__(name="VideoEditor")
 
+    @staticmethod
+    def _output_size(ratio: str, resolution: str) -> tuple[int, int]:
+        height = 1080 if str(resolution).upper() in {"1080P", "2K", "4K"} else 720
+        sizes = {
+            "16:9": (height * 16 // 9, height),
+            "9:16": (height, height * 16 // 9),
+            "1:1": (height, height),
+            "4:3": (height * 4 // 3, height),
+            "3:4": (height, height * 4 // 3),
+            "21:9": (height * 21 // 9, height),
+        }
+        width, target_height = sizes.get(ratio, sizes["16:9"])
+        return width // 2 * 2, target_height // 2 * 2
+
+    @staticmethod
+    def _normalize_clip(source: str, target: str, size: tuple[int, int], ffmpeg: str, ffprobe: str) -> None:
+        probe = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+             "-of", "csv=p=0", source],
+            capture_output=True, text=True, check=True,
+        )
+        has_audio = bool(probe.stdout.strip())
+        width, height = size
+        video_filter = (
+            f"fps=24,scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p"
+        )
+        cmd = [ffmpeg, "-y", "-i", source]
+        if not has_audio:
+            cmd += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
+        cmd += [
+            "-map", "0:v:0", "-map", "0:a:0" if has_audio else "1:a:0",
+            "-vf", video_filter, "-af", "aresample=async=1:first_pts=0,apad",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+            "-c:a", "aac", "-ar", "48000", "-ac", "2", "-r", "24",
+            "-pix_fmt", "yuv420p", "-shortest", target,
+        ]
+        subprocess.run(cmd, capture_output=True, text=True, check=True)
+
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
         input_data = self._merge_session_params(input_data)
         sid = input_data["session_id"]
@@ -102,17 +141,35 @@ class VideoEditorAgent(AgentInterface):
             total_eps = len(sorted_episodes)
 
             ffmpeg_exe = find_media_tool("ffmpeg")
+            ffprobe_exe = find_media_tool("ffprobe")
+            output_size = self._output_size(
+                input_data.get("video_ratio", "16:9"),
+                input_data.get("video_resolution", "720P"),
+            )
 
             for i, ep_idx in enumerate(sorted_episodes):
                 self._report_progress("后期制作", f"正在拼接第 {ep_idx} 集 ({i+1}/{total_eps})...", int(20 + (i/total_eps)*70))
                 
                 clip_paths = episodes_map[ep_idx]
+                normalized_paths = []
+                for clip_index, clip_path in enumerate(clip_paths, 1):
+                    normalized_path = os.path.join(
+                        output_dir, f"{sid}_ep{ep_idx}_clip{clip_index}_normalized.mp4"
+                    )
+                    try:
+                        self._normalize_clip(
+                            clip_path, normalized_path, output_size, ffmpeg_exe, ffprobe_exe
+                        )
+                    except subprocess.CalledProcessError as exc:
+                        logger.error("视频片段转码失败 %s: %s", clip_path, exc.stderr)
+                        raise RuntimeError(f"视频片段转码失败：{os.path.basename(clip_path)}") from exc
+                    normalized_paths.append(normalized_path)
                 list_file = os.path.join(video_dir, f'concat_list_ep{ep_idx}.txt')
                 output = os.path.join(output_dir, f'{sid}_ep{ep_idx}.mp4')
                 
                 with open(list_file, 'w', encoding='utf-8') as f:
-                    for p in clip_paths:
-                        abs_p = os.path.abspath(p).replace('\\', '/')
+                    for p in normalized_paths:
+                        abs_p = os.path.abspath(p).replace('\\', '/').replace("'", "'\\''")
                         f.write(f"file '{abs_p}'\n")
 
                 cmd = [
@@ -125,7 +182,7 @@ class VideoEditorAgent(AgentInterface):
                 
                 logger.info(f"[{sid}] Running ffmpeg for Ep {ep_idx}: {cmd}")
                 try:
-                    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                    subprocess.run(cmd, capture_output=True, text=True, check=True)
                 except subprocess.CalledProcessError as e:
                     logger.error(f"FFmpeg failed with exit code {e.returncode}")
                     logger.error(f"FFmpeg stderr: {e.stderr}")
