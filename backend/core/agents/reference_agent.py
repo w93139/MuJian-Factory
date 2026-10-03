@@ -9,13 +9,13 @@
 
 import asyncio
 import glob
-import json
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
+from json_utils import extract_json
 from path_utils import absolute_path
 from prompts.loader import load_prompt
 
@@ -413,10 +413,9 @@ class ReferenceGeneratorAgent(AgentInterface):
             logger.info(f"[{segment_id}] VLM选择结果: {result}")
 
             # 解析 JSON 结果
-            import re
-            json_match = re.search(r'\{[^{}]*\}', result, re.DOTALL)
-            if json_match:
-                selected = json.loads(json_match.group())
+            result_text = result[0] if isinstance(result, list) and result else result
+            selected = extract_json(result_text)
+            if isinstance(selected, dict):
                 selected_idx = selected.get('selected_index', 0)
                 if 0 <= selected_idx < len(image_paths):
                     best_path = image_paths[selected_idx]
@@ -475,14 +474,11 @@ class ReferenceGeneratorAgent(AgentInterface):
             else:
                 result_text = str(result)
 
-            import json
             try:
-                import re
-                json_match = re.search(r'\{[^{}]*\}', result_text, re.DOTALL)
-                if json_match:
-                    eval_result = json.loads(json_match.group())
+                eval_result = extract_json(result_text)
+                if isinstance(eval_result, dict):
                     return eval_result
-            except:
+            except ValueError:
                 pass
 
             return {

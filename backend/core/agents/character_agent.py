@@ -8,13 +8,13 @@
 
 import asyncio
 import glob
-import json
 import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
+from json_utils import extract_json
 from path_utils import absolute_path
 from prompts.loader import load_prompt
 
@@ -283,15 +283,11 @@ class CharacterDesignerAgent(AgentInterface):
                 result_text = str(result)
 
             # 尝试提取 JSON
-            import json
             try:
-                # 找到 JSON 部分
-                import re
-                json_match = re.search(r'\{[^{}]*\}', result_text, re.DOTALL)
-                if json_match:
-                    eval_result = json.loads(json_match.group())
+                eval_result = extract_json(result_text)
+                if isinstance(eval_result, dict):
                     return eval_result
-            except:
+            except ValueError:
                 pass
 
             return {"score": 5, "issues": ["评估解析失败"], "is_acceptable": True}
@@ -303,8 +299,6 @@ class CharacterDesignerAgent(AgentInterface):
     def _select_best_with_vlm(self, image_paths: List[str], name: str, description: str,
                                asset_type: str, species: str = "", vlm_model: str = "qwen3.5-plus") -> tuple:
         """使用 VLM 从多个版本中选择最好的一张"""
-        import re
-
         from models.vlm_client import VLM
 
         if not image_paths:
@@ -348,12 +342,8 @@ class CharacterDesignerAgent(AgentInterface):
             # 解析 JSON，提取 best_index
             best_index = 0
             try:
-                # 找到 JSON 开始和结束
-                json_start = result_text.find('{')
-                json_end = result_text.rfind('}') + 1
-                if json_start >= 0 and json_end > json_start:
-                    json_str = result_text[json_start:json_end]
-                    selection_result = json.loads(json_str)
+                selection_result = extract_json(result_text)
+                if isinstance(selection_result, dict):
                     best_index = selection_result.get('best_index', 0)
                     logger.info(f"[{asset_type}] {name} Parsed best_index: {best_index}")
             except Exception as e:

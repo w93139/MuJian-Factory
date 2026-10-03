@@ -3,16 +3,18 @@
 阶段1: 编剧智能体 (直出一遍过版本)
 """
 
+import asyncio
+import json
+import logging
 import os
 import re
-import json
-import asyncio
-import logging
-from functools import partial
 from datetime import datetime, timezone
-from typing import Any, Optional, Dict, List
+from functools import partial
+from typing import Any, Dict, List, Optional
 
+from json_utils import extract_json
 from prompts.loader import load_prompt_with_fallback
+
 from .base_agent import AgentInterface
 
 logger = logging.getLogger(__name__)
@@ -29,33 +31,10 @@ class ScriptWriterAgent(AgentInterface):
 
     @staticmethod
     def _extract_json_from_text(text: str) -> Optional[Any]:
-        text = text.strip()
-        text = re.sub(r'^```(?:json)?\s*', '', text)
-        text = re.sub(r'\s*```$', '', text)
-        text = text.strip()
         try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        # 尝试匹配第一个 { 或 [ 到底部对应的 } 或 ]
-        start_obj = text.find('{')
-        start_arr = text.find('[')
-        
-        # 确定起始位置
-        if start_obj == -1 and start_arr == -1:
+            return extract_json(text)
+        except ValueError:
             return None
-        
-        start = start_obj if (start_obj != -1 and (start_arr == -1 or start_obj < start_arr)) else start_arr
-        end_char = '}' if start == start_obj else ']'
-        end = text.rfind(end_char)
-
-        if start != -1 and end != -1 and end > start:
-            try:
-                return json.loads(text[start:end + 1])
-            except json.JSONDecodeError:
-                pass
-        return None
 
     def _gen_id(self, prefix: str = "char") -> str:
         import uuid

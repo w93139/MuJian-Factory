@@ -5,14 +5,16 @@
 支持 Segment -> Shots 嵌套结构。
 """
 
+import asyncio
+import json
+import logging
 import os
 import re
-import json
-import asyncio
-import logging
 import threading
 from datetime import datetime
-from typing import Any, Optional, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from json_utils import extract_json
 
 from .base_agent import AgentInterface
 
@@ -33,42 +35,19 @@ class StoryboardAgent(AgentInterface):
 
     @staticmethod
     def _extract_json_array(text: str) -> Optional[List[dict]]:
-        text = text.strip()
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
         try:
-            result = json.loads(text)
-            if isinstance(result, list): return result
-        except json.JSONDecodeError: pass
-        m = re.search(r"\[.*\]", text, re.DOTALL)
-        if m:
-            try:
-                result = json.loads(m.group())
-                if isinstance(result, list): return result
-            except json.JSONDecodeError: pass
-        return None
+            result = extract_json(text)
+        except ValueError:
+            return None
+        return result if isinstance(result, list) else None
 
     @staticmethod
     def _extract_json_object(text: str) -> Optional[dict]:
-        text = text.strip()
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
         try:
-            result = json.loads(text)
-            if isinstance(result, dict):
-                return result
-        except json.JSONDecodeError:
-            pass
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                result = json.loads(text[start:end + 1])
-                if isinstance(result, dict):
-                    return result
-            except json.JSONDecodeError:
-                pass
-        return None
+            result = extract_json(text)
+        except ValueError:
+            return None
+        return result if isinstance(result, dict) else None
 
     @staticmethod
     def _clean_script_line(line: str) -> str:
@@ -1265,7 +1244,7 @@ class StoryboardAgent(AgentInterface):
         # 处理人工干预/修改
         if intervention and "modified_storyboard" in intervention:
             modified_episodes = intervention["modified_storyboard"]
-            if isinstance(modified_episodes, str): modified_episodes = json.loads(modified_episodes)
+            if isinstance(modified_episodes, str): modified_episodes = extract_json(modified_episodes)
             return {
                 "payload": {
                     "session_id": sid,
