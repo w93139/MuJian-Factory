@@ -6,9 +6,11 @@ import uuid
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 
+from api.auth import require_admin, role_from_request
 from api.schemas.sandbox import (
     SandboxI2IRequest,
     SandboxLLMRequest,
@@ -137,6 +139,7 @@ def _add_record(
             "input": input_data,
             "output": output_data,
             "files": files or [],
+            "showcase": False,
             "created_at": datetime.now().isoformat(),
         }
         history = _load_history()
@@ -178,9 +181,11 @@ def _delete_record_files(files: List[str]):
 
 # 请求模型
 @router.get("/api/sandbox/history")
-async def sandbox_get_history():
+async def sandbox_get_history(request: Request):
     """获取历史记录列表"""
     history = _load_history()
+    if role_from_request(request) == "guest":
+        history = [record for record in history if record.get("showcase") is True]
     # 返回完整信息（包括 output）
     return {
         "success": True,
@@ -192,6 +197,7 @@ async def sandbox_get_history():
                 "input": r["input"],
                 "output": r.get("output"),
                 "created_at": r["created_at"],
+                "showcase": r.get("showcase") is True,
             }
             for r in history
         ]
@@ -207,13 +213,31 @@ async def sandbox_get_active_tasks():
 
 
 @router.get("/api/sandbox/history/{record_id}")
-async def sandbox_get_record(record_id: str):
+async def sandbox_get_record(record_id: str, request: Request):
     """获取单条历史记录详情"""
     history = _load_history()
     for r in history:
         if r["id"] == record_id:
-            return {"success": True, "record": r}
-    return {"success": False, "error": "记录不存在"}
+            if role_from_request(request) == "guest" and r.get("showcase") is not True:
+                raise HTTPException(404, "记录不存在")
+            return {"success": True, "record": {**r, "showcase": r.get("showcase") is True}}
+    raise HTTPException(404, "记录不存在")
+
+
+class ShowcaseUpdate(BaseModel):
+    showcase: bool
+
+
+@router.patch("/api/sandbox/history/{record_id}", dependencies=[Depends(require_admin)])
+async def sandbox_set_showcase(record_id: str, req: ShowcaseUpdate):
+    with SANDBOX_LOCK:
+        history = _load_history()
+        for record in history:
+            if record.get("id") == record_id:
+                record["showcase"] = req.showcase
+                _save_history(history)
+                return {"id": record_id, "showcase": req.showcase}
+    raise HTTPException(404, "记录不存在")
 
 
 @router.delete("/api/sandbox/history/{record_id}")

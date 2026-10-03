@@ -98,8 +98,8 @@ test('面试官可打开首页、沙盒及三条流水线历史页', async ({ pa
 
 test('示例媒体由已登录会话读取', async ({ page }) => {
   await guestLogin(page);
-  const image = await page.request.get('/code/result/e2e-showcase/image.png');
-  const video = await page.request.get('/code/result/e2e-showcase/video.mp4');
+  const image = await page.request.get('/code/result/image/e2e-showcase/image.png');
+  const video = await page.request.get('/code/result/video/e2e-showcase/video.mp4');
   expect(image.status()).toBe(200);
   expect(image.headers()['content-type']).toContain('image/png');
   expect(video.status()).toBe(200);

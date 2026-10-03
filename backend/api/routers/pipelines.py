@@ -5,9 +5,11 @@ from html import escape
 from typing import Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
 
+from api.auth import require_admin, role_from_request
 from api.schemas.pipelines import (
     ActionTransferPipelineRequest,
     DigitalHumanPipelineRequest,
@@ -20,7 +22,7 @@ from models.config_model import get_models_by_type, model_type_capabilities
 from pipelines.api_media import list_api_workflows
 from pipelines.events import task_event_stream
 from pipelines.runner import PIPELINE_REGISTRY, run_pipeline_task
-from pipelines.storage import create_task, delete_task, list_tasks, load_task
+from pipelines.storage import create_task, delete_task, list_tasks, load_task, set_task_showcase
 from pipelines.utils import TEMPLATE_FIELD_DEFAULTS, template_custom_fields, template_media_spec
 from quick_demo import quick_demo_video_model
 
@@ -276,16 +278,31 @@ async def start_generic_pipeline(pipeline: str, req: GenericPipelineRequest, bac
 
 
 @router.get("/api/tasks")
-async def get_tasks(limit: int = Query(100, ge=1, le=500)):
-    return {"tasks": list_tasks(limit=limit)}
+async def get_tasks(request: Request, limit: int = Query(100, ge=1, le=500)):
+    guest = role_from_request(request) == "guest"
+    tasks = list_tasks(limit=None if guest else limit)
+    if guest:
+        tasks = [task for task in tasks if task.get("showcase") is True][:limit]
+    return {"tasks": tasks}
 
 
 @router.get("/api/tasks/{task_id}")
-async def get_task(task_id: str):
+async def get_task(task_id: str, request: Request):
     metadata = load_task(task_id)
-    if not metadata:
+    if not metadata or (role_from_request(request) == "guest" and metadata.get("showcase") is not True):
         raise HTTPException(404, "Task not found")
     return metadata
+
+
+class ShowcaseUpdate(BaseModel):
+    showcase: bool
+
+
+@router.patch("/api/tasks/{task_id}", dependencies=[Depends(require_admin)])
+async def update_task_showcase(task_id: str, req: ShowcaseUpdate):
+    if set_task_showcase(task_id, req.showcase) is None:
+        raise HTTPException(404, "Task not found")
+    return {"task_id": task_id, "showcase": req.showcase}
 
 
 @router.delete("/api/tasks/{task_id}")
@@ -296,9 +313,9 @@ async def remove_task(task_id: str):
 
 
 @router.get("/api/tasks/{task_id}/events")
-async def subscribe_task_events(task_id: str):
+async def subscribe_task_events(task_id: str, request: Request):
     metadata = load_task(task_id)
-    if not metadata:
+    if not metadata or (role_from_request(request) == "guest" and metadata.get("showcase") is not True):
         raise HTTPException(404, "Task not found")
     initial_event = {
         "type": "snapshot",

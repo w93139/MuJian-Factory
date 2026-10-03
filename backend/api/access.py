@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from api.auth import public_mode, role_from_request
 from api.showcase import is_showcase_session
+from api.showcase_media import guest_can_read_result
 
 GUEST_READ_PATHS = {
     "/api/config",
@@ -27,14 +28,13 @@ GUEST_READ_PATTERNS = (
     re.compile(r"^/api/project/([^/]+)/artifact/[^/]+$"),
     re.compile(r"^/api/project/([^/]+)/scene/\d+/assets$"),
     re.compile(r"^/api/tasks/[^/]+$"),
+    re.compile(r"^/api/tasks/[^/]+/events$"),
     re.compile(r"^/api/sandbox/history/[^/]+$"),
     re.compile(r"^/api/pipelines/standard/templates/[^/]+/[^/]+/preview$"),
 )
 
 
 def guest_can_read(path: str) -> tuple[bool, str | None]:
-    if path.startswith("/code/result/"):
-        return True, None
     if path in GUEST_READ_PATHS:
         return True, None
     for index, pattern in enumerate(GUEST_READ_PATTERNS):
@@ -68,6 +68,10 @@ async def public_access_middleware(request: Request, call_next):
     if role == "anonymous":
         return JSONResponse(status_code=401, content={"detail": "请先登录"})
     if request.method == "GET":
+        if path.startswith("/code/result/"):
+            if not guest_can_read_result(path):
+                return JSONResponse(status_code=404, content={"detail": "Not found"})
+            return await call_next(request)
         allowed, session_id = guest_can_read(path)
         if allowed:
             if session_id and not is_showcase_session(session_id):

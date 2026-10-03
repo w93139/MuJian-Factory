@@ -28,13 +28,14 @@ def main() -> int:
         backend = Path(temporary) / "backend"
         shutil.copytree(SOURCE, backend, ignore=ignore_files)
         session_dir = backend / "code" / "data" / "sessions"
-        result_dir = backend / "code" / "result" / "e2e-showcase"
+        result_dir = backend / "code" / "result"
         session_dir.mkdir(parents=True)
-        result_dir.mkdir(parents=True)
+        (result_dir / "image" / "e2e-showcase").mkdir(parents=True)
+        (result_dir / "video" / "e2e-showcase").mkdir(parents=True)
         for name, target in (("showcase.json", "e2e-showcase.json"), ("private.json", "e2e-private.json")):
             shutil.copy2(HERE / "fixtures" / name, session_dir / target)
-        for name in ("image.png", "video.mp4"):
-            shutil.copy2(HERE / "fixtures" / name, result_dir / name)
+        shutil.copy2(HERE / "fixtures" / "image.png", result_dir / "image" / "e2e-showcase" / "image.png")
+        shutil.copy2(HERE / "fixtures" / "video.mp4", result_dir / "video" / "e2e-showcase" / "video.mp4")
         (backend / "code" / "data" / "invites.json").write_text(
             '[{"code":"E2EDEMO2","note":"自动化测试","expires_at":4102444800,"revoked":false,"last_used_at":null}]',
             encoding="utf-8",

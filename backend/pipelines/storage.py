@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shutil
 import threading
 import time
@@ -15,6 +16,7 @@ from .events import publish_task_event
 
 logger = logging.getLogger(__name__)
 _task_store_lock = threading.RLock()
+SAFE_TASK_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 TASK_DATA_DIR = os.path.join(settings.CODE_DIR, "data", "tasks")
 TASK_RESULT_DIR = os.path.join(settings.RESULT_DIR, "task")
@@ -43,10 +45,14 @@ def new_task_id() -> str:
 
 
 def task_metadata_path(task_id: str) -> str:
+    if not SAFE_TASK_ID.fullmatch(task_id):
+        raise ValueError("Invalid task ID")
     return os.path.join(TASK_DATA_DIR, f"{task_id}.json")
 
 
 def task_output_dir(task_id: str) -> str:
+    if not SAFE_TASK_ID.fullmatch(task_id):
+        raise ValueError("Invalid task ID")
     return os.path.join(TASK_RESULT_DIR, task_id)
 
 
@@ -65,12 +71,16 @@ def save_task(metadata: Dict[str, Any]) -> None:
 
 
 def load_task(task_id: str) -> Optional[Dict[str, Any]]:
+    if not SAFE_TASK_ID.fullmatch(task_id):
+        return None
     with _task_store_lock:
         path = task_metadata_path(task_id)
         if not os.path.exists(path):
             return None
         with open(path, "r", encoding="utf-8") as f:
-            return _rebase_artifact_paths(json.load(f))
+            metadata = _rebase_artifact_paths(json.load(f))
+            metadata.setdefault("showcase", False)
+            return metadata
 
 
 def delete_task(task_id: str) -> bool:
@@ -89,7 +99,7 @@ def delete_task(task_id: str) -> bool:
     return True
 
 
-def list_tasks(limit: int = 100) -> list[Dict[str, Any]]:
+def list_tasks(limit: int | None = 100) -> list[Dict[str, Any]]:
     with _task_store_lock:
         ensure_task_dirs()
         records = []
@@ -98,11 +108,13 @@ def list_tasks(limit: int = 100) -> list[Dict[str, Any]]:
                 continue
             try:
                 with open(os.path.join(TASK_DATA_DIR, filename), "r", encoding="utf-8") as f:
-                    records.append(_rebase_artifact_paths(json.load(f)))
+                    metadata = _rebase_artifact_paths(json.load(f))
+                    metadata.setdefault("showcase", False)
+                    records.append(metadata)
             except Exception:
                 continue
         records.sort(key=lambda item: item.get("created_at", ""), reverse=True)
-        return records[:limit]
+        return records[:limit] if limit is not None else records
 
 
 def create_task(pipeline: str, input_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -115,6 +127,7 @@ def create_task(pipeline: str, input_params: Dict[str, Any]) -> Dict[str, Any]:
             "task_id": task_id,
             "pipeline": pipeline,
             "status": "pending",
+            "showcase": False,
             "progress": 0,
             "message": "Task created",
             "input": input_params,
@@ -131,6 +144,19 @@ def create_task(pipeline: str, input_params: Dict[str, Any]) -> Dict[str, Any]:
         save_task(metadata)
     logger.info("Created pipeline task: task_id=%s pipeline=%s output_dir=%s", task_id, pipeline, output_dir)
     return metadata
+
+
+def set_task_showcase(task_id: str, showcase: bool) -> Dict[str, Any] | None:
+    """Update the flag under the task-store lock and write atomically."""
+    if not SAFE_TASK_ID.fullmatch(task_id):
+        return None
+    with _task_store_lock:
+        metadata = load_task(task_id)
+        if metadata is None:
+            return None
+        metadata["showcase"] = showcase
+        save_task(metadata)
+        return metadata
 
 
 def update_task(task_id: str, **updates: Any) -> Dict[str, Any]:

@@ -5,7 +5,8 @@ import { Sparkles, Image, Video, MessageSquare, Zap, Loader2, Copy, Check, Trash
 import { useSearchParams } from 'next/navigation';
 import type { ModelOption, ProviderGroup } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
-import { deleteSandboxHistoryRecord, fetchSandboxHistoryResult, fetchSandboxTasks, runSandboxTool, uploadMedia, type SandboxTool } from '@/lib/workflowApi';
+import { deleteSandboxHistoryRecord, fetchSandboxHistoryResult, fetchSandboxTasks, runSandboxTool, setSandboxRecordShowcase, uploadMedia, type SandboxTool } from '@/lib/workflowApi';
+import { useAuth } from '@/components/AuthProvider';
 import { fetchModelGroupsByType } from '@/lib/modelRegistry';
 
 // 辅助函数：将相对路径转换为完整 URL
@@ -51,6 +52,7 @@ const tools: Tool[] = [
 // 历史记录类型
 interface HistoryRecord {
   id: string;
+  showcase?: boolean;
   tool: string;
   model: string;
   input: {
@@ -293,6 +295,7 @@ function ImageUploader({
 }
 
 export default function SandboxPage() {
+  const { canEdit } = useAuth();
   const [activeTool, setActiveTool] = useState<ToolType>('llm');
   const [modelGroups, setModelGroups] = useState<Record<ToolType, ProviderGroup[]>>(EMPTY_MODEL_GROUPS);
   const [prompt, setPrompt] = useState('');
@@ -307,6 +310,7 @@ export default function SandboxPage() {
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [manageMode, setManageMode] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [selectedRecord, setSelectedRecord] = useState<HistoryRecord | null>(null);
   const searchParams = useSearchParams();
 
@@ -436,6 +440,18 @@ export default function SandboxPage() {
       console.error('Failed to delete:', e);
     } finally {
       setDeleting(null);
+    }
+  };
+
+  const toggleShowcase = async (record: HistoryRecord) => {
+    setToggling(record.id);
+    try {
+      await setSandboxRecordShowcase(record.id, !record.showcase);
+      setHistory(previous => previous.map(item => item.id === record.id ? { ...item, showcase: !record.showcase } : item));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '更新示例状态失败');
+    } finally {
+      setToggling(null);
     }
   };
 
@@ -705,14 +721,14 @@ export default function SandboxPage() {
             <div className="flex items-center gap-2 mb-4">
               <FolderOpen className="w-4 h-4 text-gray-400" />
               <h2 className="text-sm font-medium text-gray-600">{getToolName(activeTool)}历史记录</h2>
-              <button
+              {canEdit && <button
                 onClick={() => setManageMode(value => !value)}
                 className={`ml-auto text-xs px-2.5 h-8 rounded-lg transition-colors ${
                   manageMode ? 'bg-red-50 text-red-600 hover:bg-red-100' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                 }`}
               >
                 {manageMode ? '完成' : '管理'}
-              </button>
+              </button>}
             </div>
             {history.filter(record => record.tool === activeTool).length === 0 ? (
               <div className="h-32 rounded-xl border border-dashed border-gray-200 bg-white/70 flex items-center justify-center text-sm text-gray-400">
@@ -757,6 +773,12 @@ export default function SandboxPage() {
                         </button>
                       )}
                     </div>
+                    {canEdit && <button
+                      type="button"
+                      onClick={event => { event.stopPropagation(); void toggleShowcase(record); }}
+                      disabled={toggling === record.id}
+                      className="mt-3 rounded-lg border border-indigo-100 px-2.5 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50 disabled:opacity-50"
+                    >{record.showcase ? '取消示例' : '设为示例'}</button>}
                   </div>
                 ))}
               </div>

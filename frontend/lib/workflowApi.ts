@@ -50,6 +50,7 @@ export interface PipelineTask {
   created_at?: string;
   updated_at?: string;
   output_dir?: string;
+  showcase?: boolean;
 }
 
 export interface SandboxTask {
@@ -193,6 +194,15 @@ export async function fetchPipelineTask(taskId: string): Promise<PipelineTask> {
   return resp.json();
 }
 
+export async function setPipelineTaskShowcase(taskId: string, showcase: boolean): Promise<void> {
+  const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ showcase }),
+  });
+  await requireOkResponse(response, '更新任务示例状态失败');
+}
+
 export async function fetchSandboxTasks(): Promise<SandboxTask[]> {
   const resp = await fetch('/api/sandbox/tasks');
   if (!resp.ok) return [];
@@ -205,6 +215,15 @@ export async function fetchSandboxHistory(): Promise<Array<Record<string, unknow
   await requireOkResponse(response, '历史记录加载失败');
   const data = await response.json();
   return data.records || [];
+}
+
+export async function setSandboxRecordShowcase(recordId: string, showcase: boolean): Promise<void> {
+  const response = await fetch(`/api/sandbox/history/${encodeURIComponent(recordId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ showcase }),
+  });
+  await requireOkResponse(response, '更新沙盒示例状态失败');
 }
 
 export async function clearTempCache(): Promise<{ status: string; deleted: number; freed_bytes?: number; freed_mb?: number; errors?: Array<{ path: string; error: string }> }> {

@@ -29,6 +29,7 @@ import {
   deletePipelineTask,
   fetchPipelineTask,
   fetchPipelineTasks,
+  setPipelineTaskShowcase,
   startActionTransferPipeline,
   startDigitalHumanPipeline,
   startStandardPipeline,
@@ -47,6 +48,7 @@ import {
 } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
 import ErrorDetails from '@/components/ErrorDetails';
+import { useAuth } from '@/components/AuthProvider';
 
 type PipelineId = 'standard' | 'action_transfer' | 'digital_human';
 
@@ -566,10 +568,13 @@ function PipelineHistory({
   onSelect: (task: PipelineTask) => void;
   onDeleted?: (taskId: string) => void;
 }) {
+  const { canEdit } = useAuth();
   const [tasks, setTasks] = useState<PipelineTask[]>([]);
   const [loading, setLoading] = useState(false);
   const [manageMode, setManageMode] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [showcaseError, setShowcaseError] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -598,12 +603,25 @@ function PipelineHistory({
     }
   };
 
+  const toggleShowcase = async (task: PipelineTask) => {
+    setToggling(task.task_id);
+    setShowcaseError('');
+    try {
+      await setPipelineTaskShowcase(task.task_id, !task.showcase);
+      setTasks(previous => previous.map(item => item.task_id === task.task_id ? { ...item, showcase: !task.showcase } : item));
+    } catch (cause) {
+      setShowcaseError(cause instanceof Error ? cause.message : '更新示例状态失败');
+    } finally {
+      setToggling(null);
+    }
+  };
+
   return (
     <section className="w-full max-w-6xl mx-auto px-6 pb-12">
       <div className="flex items-center gap-2 mb-4">
         <Clock className="w-4 h-4 text-gray-400" />
         <h3 className="text-sm font-medium text-gray-600">历史记录</h3>
-        <button
+        {canEdit && <button
           onClick={() => setManageMode(value => !value)}
           className={clsx(
             'ml-auto px-2.5 h-8 rounded-lg text-xs font-medium transition-colors',
@@ -611,7 +629,7 @@ function PipelineHistory({
           )}
         >
           {manageMode ? '完成' : '管理'}
-        </button>
+        </button>}
         <button
           onClick={() => load().catch(() => {})}
           className="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 flex items-center justify-center"
@@ -620,6 +638,7 @@ function PipelineHistory({
           <RefreshCw className={clsx('w-3.5 h-3.5', loading && 'animate-spin')} />
         </button>
       </div>
+      {showcaseError && <p role="alert" className="mb-3 text-xs text-red-600">{showcaseError}</p>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {tasks.map(task => (
           <div
@@ -664,6 +683,12 @@ function PipelineHistory({
                 <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-400 flex-shrink-0 mt-0.5" />
               )}
             </div>
+            {canEdit && <button
+              type="button"
+              onClick={event => { event.stopPropagation(); void toggleShowcase(task); }}
+              disabled={toggling === task.task_id}
+              className="mt-3 rounded-lg border border-blue-100 px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+            >{task.showcase ? '取消示例' : '设为示例'}</button>}
           </div>
         ))}
       </div>

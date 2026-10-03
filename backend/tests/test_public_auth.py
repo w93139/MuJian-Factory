@@ -9,9 +9,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from api import auth, showcase
+from api import auth, showcase, showcase_media
 from api.app import app
 from api.routers import admin, configuration, sessions
+from api.routers import sandbox as sandbox_router
+from pipelines import storage
 
 
 @pytest.fixture
@@ -46,12 +48,15 @@ def test_public_static_files_reject_traversal_and_data_for_every_role(public_cli
     data_dir = tmp_path / "data"
     result_dir = tmp_path / "result"
     data_dir.mkdir()
-    result_dir.mkdir()
+    media_dir = result_dir / "image" / "public"
+    media_dir.mkdir(parents=True)
     (data_dir / "invites.json").write_text('{"secret":"private"}', encoding="utf-8")
-    (result_dir / "showcase.mp4").write_bytes(b"media")
+    (media_dir / "showcase.mp4").write_bytes(b"media")
     static_mount = next(route for route in app.routes if getattr(route, "path", None) == "/code")
     monkeypatch.setattr(static_mount.app, "directory", str(tmp_path))
     monkeypatch.setattr(static_mount.app, "all_directories", [str(tmp_path)])
+    monkeypatch.setattr(showcase_media.settings, "RESULT_DIR", str(result_dir))
+    monkeypatch.setattr(showcase_media, "is_showcase_session", lambda session_id: session_id == "public")
 
     paths = [
         "/code/data/invites.json",
@@ -66,14 +71,14 @@ def test_public_static_files_reject_traversal_and_data_for_every_role(public_cli
     assert public_client.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 200
     for path in paths:
         assert public_client.get(path).status_code == 404
-    assert public_client.get("/code/result/showcase.mp4").content == b"media"
+    assert public_client.get("/code/result/image/public/showcase.mp4").content == b"media"
 
     public_client.post("/api/auth/logout")
     invite = auth.create_invite()
     assert public_client.post("/api/auth/login", json={"invite_code": invite["code"]}).status_code == 200
     for path in paths:
         assert public_client.get(path).status_code == 404
-    assert public_client.get("/code/result/showcase.mp4").content == b"media"
+    assert public_client.get("/code/result/image/public/showcase.mp4").content == b"media"
 
 
 def test_roles_invites_revocation_and_static_secret_protection(public_client):
@@ -193,3 +198,64 @@ def test_showcase_list_detail_and_patch(public_client, tmp_path):
         assert client.get("/api/sessions/private").status_code == 404
         assert client.get("/api/project/private/status").status_code == 404
         assert client.patch("/api/sessions/public", json={"showcase": False}).status_code == 403
+
+
+def test_task_sandbox_and_media_showcase_scope(public_client, tmp_path, monkeypatch):
+    code_dir = tmp_path / "code"
+    result_dir = code_dir / "result"
+    task_data_dir = code_dir / "data" / "tasks"
+    sandbox_dir = result_dir / "sandbox"
+    sandbox_dir.mkdir(parents=True)
+    monkeypatch.setattr(storage, "TASK_DATA_DIR", str(task_data_dir))
+    monkeypatch.setattr(storage, "TASK_RESULT_DIR", str(result_dir / "task"))
+    monkeypatch.setattr(sandbox_router, "SANDBOX_HISTORY_FILE", str(sandbox_dir / "history.json"))
+    monkeypatch.setattr(showcase_media.settings, "RESULT_DIR", str(result_dir))
+    monkeypatch.setattr(showcase_media.settings, "CODE_DIR", str(code_dir))
+    monkeypatch.setattr(showcase_media, "is_showcase_session", lambda sid: sid == "public")
+    static_mount = next(route for route in app.routes if getattr(route, "path", None) == "/code")
+    monkeypatch.setattr(static_mount.app, "directory", str(code_dir))
+    monkeypatch.setattr(static_mount.app, "all_directories", [str(code_dir)])
+
+    public_task = storage.create_task("standard", {"title": "public"})
+    private_task = storage.create_task("standard", {"title": "private"})
+    for task in (public_task, private_task):
+        (result_dir / "task" / task["task_id"] / "video.mp4").write_bytes(task["task_id"].encode())
+    public_sandbox_file = sandbox_dir / "public.mp4"
+    private_sandbox_file = sandbox_dir / "private.mp4"
+    public_sandbox_file.write_bytes(b"public")
+    private_sandbox_file.write_bytes(b"private")
+    sandbox_router._add_record("video", "mock", {}, {"video_path": str(public_sandbox_file)}, [str(public_sandbox_file)], "public")
+    sandbox_router._add_record("video", "mock", {}, {"video_path": str(private_sandbox_file)}, [str(private_sandbox_file)], "private")
+
+    client = public_client
+    assert client.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 200
+    assert len(client.get("/api/tasks").json()["tasks"]) == 2
+    assert len(client.get("/api/sandbox/history").json()["records"]) == 2
+    assert client.patch(f"/api/tasks/{public_task['task_id']}", json={"showcase": True}).status_code == 200
+    assert client.patch("/api/sandbox/history/public", json={"showcase": True}).status_code == 200
+    assert storage.load_task(public_task["task_id"])["showcase"] is True
+    assert sandbox_router._load_history()[1]["showcase"] is True
+    client.post("/api/auth/logout")
+    invite = auth.create_invite()
+    assert client.post("/api/auth/login", json={"invite_code": invite["code"]}).status_code == 200
+
+    assert [item["task_id"] for item in client.get("/api/tasks").json()["tasks"]] == [public_task["task_id"]]
+    assert client.get(f"/api/tasks/{private_task['task_id']}").status_code == 404
+    assert client.get(f"/api/tasks/{private_task['task_id']}/events").status_code == 404
+    assert client.get(f"/api/tasks/{public_task['task_id']}").status_code == 200
+    assert [item["id"] for item in client.get("/api/sandbox/history").json()["records"]] == ["public"]
+    assert client.get("/api/sandbox/history/private").status_code == 404
+    assert client.patch(f"/api/tasks/{public_task['task_id']}", json={"showcase": False}).status_code == 403
+    assert client.patch("/api/sandbox/history/public", json={"showcase": False}).status_code == 403
+    assert client.get(f"/code/result/task/{public_task['task_id']}/video.mp4").status_code == 200
+    assert client.get(f"/code/result/task/{private_task['task_id']}/video.mp4").status_code == 404
+    assert client.get("/code/result/sandbox/public.mp4").status_code == 200
+    assert client.get("/code/result/sandbox/private.mp4").status_code == 404
+    assert client.get("/code/result/sandbox/history.json").status_code == 404
+
+    admin_client = TestClient(app)
+    assert admin_client.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 200
+    assert admin_client.patch(f"/api/tasks/{public_task['task_id']}", json={"showcase": False}).status_code == 200
+    assert admin_client.patch("/api/sandbox/history/public", json={"showcase": False}).status_code == 200
+    assert client.get(f"/code/result/task/{public_task['task_id']}/video.mp4").status_code == 404
+    assert client.get("/code/result/sandbox/public.mp4").status_code == 404

@@ -56,7 +56,7 @@ export default function ReadOnlyHistory({ title, pipeline }: { title: string; pi
               <div className="truncate text-sm font-medium text-gray-700">{item.title}</div>
               <div className="mt-1 text-xs text-gray-400">{item.status || '未知状态'}</div>
             </button>)}
-            {items.length === 0 && !error && <p className="rounded-xl border border-dashed border-gray-200 p-5 text-sm text-gray-400">暂无历史记录。</p>}
+            {items.length === 0 && !error && <p className="rounded-xl border border-dashed border-gray-200 p-5 text-sm text-gray-400">暂无示例作品。</p>}
           </div>
           <div className="min-h-72 rounded-2xl border border-gray-200 bg-white p-5">
             {current ? <>
