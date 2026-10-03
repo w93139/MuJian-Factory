@@ -134,6 +134,17 @@ def test_login_failures_are_limited_per_ip(public_client):
     assert client.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 429
 
 
+def test_login_failures_do_not_lock_other_client_ips(public_client):
+    first = TestClient(app, client=("198.51.100.10", 50001))
+    second = TestClient(app, client=("198.51.100.11", 50002))
+    for _ in range(5):
+        assert first.post("/api/auth/login", json={"password": "wrong"}).status_code == 401
+    assert first.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 429
+    assert second.post("/api/auth/login", json={"password": "admin-test-password"}).status_code == 200
+    assert "198.51.100.10" in auth._login_failures
+    assert "198.51.100.11" not in auth._login_failures
+
+
 def test_guest_config_omits_all_secret_fields_and_admin_cannot_change_key(public_client):
     client = public_client
     visible = {"api_providers": {"ark": {"api_key": "********", "base_url": "https://example.test"}}}
