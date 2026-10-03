@@ -7,6 +7,7 @@ from dashscope.aigc.image_generation import ImageGeneration
 
 from config import Config
 from models.image_processor import ImageProcessor
+from usage import reserve_usage
 
 
 class DashScopeClient:
@@ -21,7 +22,10 @@ class DashScopeClient:
         Text to Image generation using DashScope
         """
         try:
+            if not self.api_key:
+                raise RuntimeError("DASHSCOPE_API_KEY 未配置")
             messages = [{"role": "user", "content": [{"text": prompt}]}]
+            reserve_usage(model, images=n)
             response = ImageGeneration.call(
                 model=model,
                 api_key=self.api_key,
@@ -85,7 +89,10 @@ class DashScopeClient:
         ]
 
         try:
+            if not self.api_key:
+                raise RuntimeError("DASHSCOPE_API_KEY 未配置")
             # Use ImageGeneration.call with messages, same as generate_image
+            reserve_usage(model, images=n)
             response = ImageGeneration.call(
                 model=model,
                 api_key=self.api_key,

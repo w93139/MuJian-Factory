@@ -14,6 +14,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
+from error_messages import safe_error_text
 from json_utils import extract_json
 from path_utils import absolute_path
 from prompts.loader import load_prompt
@@ -233,7 +234,7 @@ class CharacterDesignerAgent(AgentInterface):
                     self._report_progress("角色设计", f"重新生成中 ({iteration + 2}/{max_iterations}): {name}", 0)
 
             except Exception as e:
-                logger.error(f"Asset gen failed for {asset_type} {name}({asset_id}): {e}")
+                logger.error("Asset gen failed for %s %s(%s): %s", asset_type, name, asset_id, safe_error_text(e))
 
         # 达到最大迭代次数，尝试使用 VLM 选择最佳图片
         logger.warning(f"[{asset_type}] {name} reached max iterations ({max_iterations}), trying VLM selection")
@@ -294,7 +295,7 @@ class CharacterDesignerAgent(AgentInterface):
 
         except Exception as e:
             logger.warning(f"VLM evaluation failed: {e}")
-            return {"score": 5, "issues": [str(e)], "is_acceptable": True}
+            return {"score": 5, "issues": [safe_error_text(e)], "is_acceptable": True}
 
     def _select_best_with_vlm(self, image_paths: List[str], name: str, description: str,
                                asset_type: str, species: str = "", vlm_model: str = "qwen3.5-plus") -> tuple:

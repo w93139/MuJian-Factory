@@ -15,6 +15,7 @@ from api.schemas.pipelines import (
     StandardPipelineRequest,
 )
 from config import BASE_DIR
+from job_limits import job_limiter
 from models.config_model import get_models_by_type, model_type_capabilities
 from pipelines.api_media import list_api_workflows
 from pipelines.events import task_event_stream
@@ -96,8 +97,16 @@ def _render_preview_html(raw: str) -> str:
 def _start_task(background_tasks: BackgroundTasks, pipeline: str, params: dict):
     if pipeline not in PIPELINE_REGISTRY:
         raise HTTPException(404, f"Pipeline not found: {pipeline}")
-    metadata = create_task(pipeline=pipeline, input_params=params)
-    background_tasks.add_task(run_pipeline_task, metadata["task_id"], pipeline, params)
+    try:
+        job_token = job_limiter.reserve()
+    except RuntimeError as exc:
+        raise HTTPException(429, str(exc)) from exc
+    try:
+        metadata = create_task(pipeline=pipeline, input_params=params)
+        background_tasks.add_task(run_pipeline_task, metadata["task_id"], pipeline, params, job_token)
+    except BaseException:
+        job_limiter.release(job_token)
+        raise
     return {
         "task_id": metadata["task_id"],
         "pipeline": pipeline,

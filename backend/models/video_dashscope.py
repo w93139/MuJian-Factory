@@ -19,6 +19,7 @@ from requests import exceptions as requests_exceptions
 
 from config import Config
 from path_utils import absolute_path
+from usage import reserve_usage
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,8 @@ class DashscopeVideoClient:
         """
         if VideoSynthesis is None:
             raise RuntimeError("dashscope package not installed. Run: pip install dashscope")
+        if not self.api_key:
+            raise RuntimeError("DASHSCOPE_API_KEY 未配置")
 
         if image_path and not os.path.exists(image_path):
             raise FileNotFoundError(f"输入图片不存在: {image_path}")
@@ -200,6 +203,7 @@ class DashscopeVideoClient:
             if seed is not None:
                 call_kwargs["seed"] = seed
 
+            reserve_usage(model, seconds=duration)
             rsp = self._with_network_retry(
                 "submit task",
                 lambda: VideoSynthesis.async_call(**call_kwargs),
@@ -232,6 +236,7 @@ class DashscopeVideoClient:
             if seed is not None:
                 call_kwargs["seed"] = seed
 
+            reserve_usage(model, seconds=duration)
             rsp = self._with_network_retry(
                 "submit task",
                 lambda: VideoSynthesis.async_call(**call_kwargs),
@@ -268,6 +273,7 @@ class DashscopeVideoClient:
             if seed is not None:
                 call_kwargs["seed"] = seed
 
+            reserve_usage(model, seconds=duration)
             rsp = self._with_network_retry(
                 "submit task",
                 lambda: VideoSynthesis.async_call(**call_kwargs),
@@ -299,6 +305,7 @@ class DashscopeVideoClient:
             if seed is not None:
                 call_kwargs["seed"] = seed
 
+            reserve_usage(model, seconds=duration)
             rsp = self._with_network_retry(
                 "submit task",
                 lambda: VideoSynthesis.async_call(**call_kwargs),

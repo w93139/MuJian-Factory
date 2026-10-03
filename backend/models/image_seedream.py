@@ -13,6 +13,7 @@ import requests
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from config import Config
+from usage import reserve_usage
 
 # 模型名称映射表（旧名称 -> 新名称）
 MODEL_NAME_MAP: Dict[str, str] = {
@@ -219,6 +220,7 @@ class SeedreamClient:
             extra_body["image"] = ref_images
 
         # 调用 API
+        reserve_usage(model, images=1)
         response = self._with_retry(
             "图片生成",
             lambda: self.client.images.generate(

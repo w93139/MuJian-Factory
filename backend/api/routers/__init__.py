@@ -1,5 +1,7 @@
 """API routers."""
 
+from .admin import router as admin_router
+from .auth import router as auth_router
 from .configuration import router as configuration_router
 from .files import router as files_router
 from .health import router as health_router
@@ -10,6 +12,8 @@ from .stages import router as stages_router
 from .workflow import router as workflow_router
 
 __all__ = [
+    "admin_router",
+    "auth_router",
     "health_router",
     "files_router",
     "workflow_router",

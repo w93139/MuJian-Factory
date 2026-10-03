@@ -7,8 +7,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from api.access import public_access_middleware
+from api.auth import validate_public_settings
 from api.logging_config import setup_concurrent_logging
 from api.routers import (
+    admin_router,
+    auth_router,
     configuration_router,
     files_router,
     health_router,
@@ -46,6 +50,7 @@ def _cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_public_settings()
     logger.info("Starting Mujian API")
     logger.info("Code directory mounted at /code: %s", settings.CODE_DIR)
     yield
@@ -53,6 +58,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Mujian", version="2.0.0", lifespan=lifespan)
+app.middleware("http")(public_access_middleware)
 
 cors_origins = _cors_origins()
 app.add_middleware(
@@ -68,6 +74,8 @@ os.makedirs(settings.CODE_DIR, exist_ok=True)
 app.mount("/code", StaticFiles(directory=settings.CODE_DIR), name="code")
 
 app.include_router(health_router)
+app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(files_router)
 app.include_router(workflow_router)
 app.include_router(sessions_router)

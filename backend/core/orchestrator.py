@@ -25,6 +25,8 @@ from core.agents import (
     VideoDirectorAgent,
     VideoEditorAgent,
 )
+from error_messages import safe_error_text
+from job_limits import job_limiter
 from path_utils import absolute_path, stored_artifact_paths
 
 logger = logging.getLogger(__name__)
@@ -853,29 +855,34 @@ class WorkflowEngine:
         if progress_callback:
             agent.set_progress_callback(wrapped_progress_callback)
 
-        if not background_item_regeneration:
-            with self._state_lock:
-                if state.session_id in self._active_sessions:
-                    raise RuntimeError(f"Session {state.session_id} is already running a stage.")
-                self._active_sessions.add(state.session_id)
-                active_registered = True
-                state.current_stage = stage
-                state.status[stage.value] = "running"
-                state.error = None
-                state.updated_at = datetime.now()
-                state.stage_progress[stage.value] = {
-                    "phase": stage.value,
-                    "step": "启动中...",
-                    "message": "启动中...",
-                    "percent": 0,
-                    "updated_at": time.time(),
-                }
-                try:
-                    self.save_session_to_disk(state.session_id)
-                except Exception:
-                    self._active_sessions.discard(state.session_id)
-                    active_registered = False
-                    raise
+        job_token = job_limiter.reserve()
+        try:
+            if not background_item_regeneration:
+                with self._state_lock:
+                    if state.session_id in self._active_sessions:
+                        raise RuntimeError(f"Session {state.session_id} is already running a stage.")
+                    self._active_sessions.add(state.session_id)
+                    active_registered = True
+                    state.current_stage = stage
+                    state.status[stage.value] = "running"
+                    state.error = None
+                    state.updated_at = datetime.now()
+                    state.stage_progress[stage.value] = {
+                        "phase": stage.value,
+                        "step": "启动中...",
+                        "message": "启动中...",
+                        "percent": 0,
+                        "updated_at": time.time(),
+                    }
+                    try:
+                        self.save_session_to_disk(state.session_id)
+                    except Exception:
+                        self._active_sessions.discard(state.session_id)
+                        active_registered = False
+                        raise
+        except BaseException:
+            job_limiter.release(job_token)
+            raise
 
         try:
             result = await agent.process(input_data, intervention=intervention)
@@ -965,12 +972,12 @@ class WorkflowEngine:
             with self._state_lock:
                 if not background_item_regeneration:
                     state.status[stage.value] = "error"
-                state.error = str(e)
+                state.error = safe_error_text(e)
                 state.updated_at = datetime.now()
                 state.stage_progress[stage.value] = {
                     "phase": stage.value,
                     "step": "执行失败",
-                    "message": "执行失败",
+                    "message": state.error,
                     "percent": state.stage_progress.get(stage.value, {}).get("percent", 0),
                     "updated_at": time.time(),
                 }
@@ -978,6 +985,7 @@ class WorkflowEngine:
                 self.save_session_to_disk(state.session_id)
             raise
         finally:
+            job_limiter.release(job_token)
             if active_registered:
                 with self._state_lock:
                     self._active_sessions.discard(state.session_id)

@@ -12,6 +12,7 @@ from typing import Optional
 import requests
 
 from config import Config
+from usage import reserve_usage
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +118,7 @@ class SeedanceVideoClient:
                 payload[key] = kwargs[key]
 
         logger.info(f"SeedanceVideoClient: 提交任务 model={model}, duration={duration}s")
+        reserve_usage(model, seconds=duration)
         resp = requests.post(
             url,
             headers=self._headers(),

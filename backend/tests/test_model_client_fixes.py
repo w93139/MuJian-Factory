@@ -27,7 +27,7 @@ def test_seedance_omits_none_parameters_and_handles_null_error(tmp_path):
     submitted = MagicMock(ok=True)
     submitted.json.return_value = {"id": "task-1"}
     with patch("models.video_seedance.requests.post", return_value=submitted) as post:
-        assert client._submit_task("scene", str(image), "seedance", 5, seed=None,
+        assert client._submit_task("scene", str(image), "doubao-seedance-2-0-260128", 5, seed=None,
                                    watermark=False, generate_audio=None, ratio=None) == "task-1"
     payload = post.call_args.kwargs["json"]
     assert payload["watermark"] is False

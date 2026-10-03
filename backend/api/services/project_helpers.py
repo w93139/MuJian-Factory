@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator, Callable, Dict, Optional
 from fastapi import Request
 
 from core.orchestrator import WorkflowStage
+from error_messages import safe_error_text
 
 
 def make_progress_channel():
@@ -112,7 +113,7 @@ async def stream_workflow_task(
             workflow_engine.persist_session_snapshot(state.session_id)
         except Exception:
             pass
-        yield json.dumps({"type": "error", "content": str(e)}) + "\n"
+        yield json.dumps({"type": "error", "content": safe_error_text(e)}) + "\n"
 
 
 def make_cancellation(workflow_engine, session_id: str):

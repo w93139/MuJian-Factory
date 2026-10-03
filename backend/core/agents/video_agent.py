@@ -15,6 +15,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
+from error_messages import safe_error_text
 from path_utils import absolute_path
 
 from .base_agent import AgentInterface
@@ -105,7 +106,7 @@ class VideoDirectorAgent(AgentInterface):
             )
             return segment_id, save_path
         except Exception as e:
-            logger.error(f"Video gen failed for {segment_id}: {e}")
+            logger.error("Video gen failed for %s: %s", segment_id, safe_error_text(e))
             if os.path.exists(save_path):
                 try:
                     os.remove(save_path)
@@ -492,8 +493,8 @@ class VideoDirectorAgent(AgentInterface):
                             try:
                                 _, res_path = fut.result()
                             except Exception as e:
-                                logger.error(f"Regen future error for {sid_done}: {e}")
-                                generation_errors[sid_done] = str(e)
+                                logger.error("Regen future error for %s: %s", sid_done, safe_error_text(e))
+                                generation_errors[sid_done] = safe_error_text(e)
                                 res_path = None
                             done += 1
                             pct = 5 + int(90 * done / max(1, len(regen_ids)))
@@ -576,8 +577,8 @@ class VideoDirectorAgent(AgentInterface):
                     try:
                         _, res_path = fut.result()
                     except Exception as e:
-                        logger.error(f"Video future error for {sid_done}: {e}")
-                        generation_errors[sid_done] = str(e)
+                        logger.error("Video future error for %s: %s", sid_done, safe_error_text(e))
+                        generation_errors[sid_done] = safe_error_text(e)
                         res_path = None
                     done += 1
                     pct = 5 + int(90 * done / max(1, len(tasks)))

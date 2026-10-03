@@ -15,6 +15,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
+from error_messages import safe_error_text
 from json_utils import extract_json
 from path_utils import absolute_path
 from prompts.loader import load_prompt
@@ -355,7 +356,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                     self._report_progress("参考图", f"重新生成中 ({version + 2}/{max_versions}): {segment_id}", 0)
 
             except Exception as e:
-                logger.error(f"Segment {segment_id} image generation failed: {e}")
+                logger.error("Segment %s image generation failed: %s", segment_id, safe_error_text(e))
 
         # 所有版本都没有达到硬性标准，使用 VLM 选择最好的
         if all_versions:
@@ -435,7 +436,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                     return best_path, best_eval
 
         except Exception as e:
-            logger.error(f"[{segment_id}] VLM选择最佳图片失败: {e}")
+            logger.error("[%s] VLM选择最佳图片失败: %s", segment_id, safe_error_text(e))
 
         # 如果失败，不要把未通过硬性校验的图片静默标记为可用。
         return image_paths[0], {
@@ -489,11 +490,11 @@ class ReferenceGeneratorAgent(AgentInterface):
             }
 
         except Exception as e:
-            logger.warning(f"VLM evaluation failed: {e}")
+            logger.warning("VLM evaluation failed: %s", safe_error_text(e))
             return {
                 "score": 0,
                 "hard_failures": ["VLM评估失败，无法确认硬性标准"],
-                "issues": [str(e)],
+                "issues": [safe_error_text(e)],
                 "is_acceptable": False,
             }
 
@@ -696,7 +697,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                                 else:
                                     ff_prompt = str(ff_prompt_resp).strip()
                             except Exception as e:
-                                logger.error(f"Error generating first-frame prompt for {segment_id}: {e}")
+                                logger.error("Error generating first-frame prompt for %s: %s", segment_id, safe_error_text(e))
                                 ff_prompt = plot[:200]
 
                         logger.info(f"[{segment_id}] first-frame prompt: {ff_prompt}...")
@@ -729,7 +730,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                                 _, result_path, eval_result, ff_prompt = fut.result()
                                 prompt_map[segment_id_done] = ff_prompt
                             except Exception as e:
-                                logger.error(f"Regen future error for {segment_id_done}: {e}")
+                                logger.error("Regen future error for %s: %s", segment_id_done, safe_error_text(e))
                                 result_path = None
                             done += 1
                             pct = calc_pct_regen(done)
@@ -844,7 +845,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                             else:
                                 ff_prompt = str(ff_prompt_resp).strip()
                         except Exception as e:
-                            logger.error(f"Error generating first-frame prompt for {segment_id}: {e}")
+                            logger.error("Error generating first-frame prompt for %s: %s", segment_id, safe_error_text(e))
                             ff_prompt = plot[:200]
 
                     logger.info(f"[{segment_id}] Prompt ready, starting image generation...")
@@ -875,7 +876,7 @@ class ReferenceGeneratorAgent(AgentInterface):
                         _, result_path, eval_result, ff_prompt = fut.result()
                         first_frame_prompts[segment_id_done] = ff_prompt
                     except Exception as e:
-                        logger.error(f"Image future error for {segment_id_done}: {e}")
+                        logger.error("Image future error for %s: %s", segment_id_done, safe_error_text(e))
                         result_path = None
                     
                     done += 1

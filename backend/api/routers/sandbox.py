@@ -17,6 +17,7 @@ from api.schemas.sandbox import (
     SandboxVLMRequest,
 )
 from config import settings
+from error_messages import safe_error_text
 from path_security import resolve_media_reference
 
 router = APIRouter(tags=["Sandbox"])
@@ -265,8 +266,8 @@ async def sandbox_llm(req: SandboxLLMRequest):
         logger.info("Sandbox LLM completed: model=%s record_id=%s", req.model, record_id)
         return {"success": True, "result": result, "record_id": record_id}
     except Exception as e:
-        logger.exception("Sandbox LLM failed: model=%s", req.model)
-        return {"success": False, "error": str(e)}
+        logger.error("Sandbox LLM failed: model=%s reason=%s", req.model, safe_error_text(e))
+        return {"success": False, "error": safe_error_text(e)}
     finally:
         _finish_active_task(task_id)
 
@@ -298,8 +299,8 @@ async def sandbox_vlm(req: SandboxVLMRequest):
         logger.info("Sandbox VLM completed: model=%s record_id=%s", req.model, record_id)
         return {"success": True, "result": result, "record_id": record_id}
     except Exception as e:
-        logger.exception("Sandbox VLM failed: model=%s", req.model)
-        return {"success": False, "error": str(e)}
+        logger.error("Sandbox VLM failed: model=%s reason=%s", req.model, safe_error_text(e))
+        return {"success": False, "error": safe_error_text(e)}
     finally:
         _finish_active_task(task_id)
 
@@ -344,8 +345,8 @@ async def sandbox_t2i(req: SandboxT2IRequest):
             "record_id": record_id,
         }
     except Exception as e:
-        logger.exception("Sandbox T2I failed: model=%s", req.model)
-        return {"success": False, "error": str(e)}
+        logger.error("Sandbox T2I failed: model=%s reason=%s", req.model, safe_error_text(e))
+        return {"success": False, "error": safe_error_text(e)}
     finally:
         _finish_active_task(task_id)
 
@@ -390,8 +391,8 @@ async def sandbox_i2i(req: SandboxI2IRequest):
             "record_id": record_id,
         }
     except Exception as e:
-        logger.exception("Sandbox I2I failed: model=%s", req.model)
-        return {"success": False, "error": str(e)}
+        logger.error("Sandbox I2I failed: model=%s reason=%s", req.model, safe_error_text(e))
+        return {"success": False, "error": safe_error_text(e)}
     finally:
         _finish_active_task(task_id)
 
@@ -441,7 +442,7 @@ async def sandbox_video(req: SandboxVideoRequest):
             "record_id": record_id,
         }
     except Exception as e:
-        logger.exception("Sandbox video failed: model=%s", req.model)
-        return {"success": False, "error": str(e)}
+        logger.error("Sandbox video failed: model=%s reason=%s", req.model, safe_error_text(e))
+        return {"success": False, "error": safe_error_text(e)}
     finally:
         _finish_active_task(task_id)
