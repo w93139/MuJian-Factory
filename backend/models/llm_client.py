@@ -9,16 +9,16 @@ if backend_dir not in sys.path:
 import logging
 
 try:
-    from models.llm_gpt import GPT
-    from models.llm_gemini import Gemini
-    from models.llm_deepseek import DeepSeek
     from models.llm_dashscope import QwenLLM
+    from models.llm_deepseek import DeepSeek
+    from models.llm_gemini import Gemini
+    from models.llm_gpt import GPT
     from models.vlm_dashscope import QwenVLClient
 except ImportError:
-    from llm_gpt import GPT
-    from llm_gemini import Gemini
-    from llm_deepseek import DeepSeek
     from llm_dashscope import QwenLLM
+    from llm_deepseek import DeepSeek
+    from llm_gemini import Gemini
+    from llm_gpt import GPT
     from vlm_dashscope import QwenVLClient
 
 from config import Config
@@ -91,18 +91,21 @@ class LLM:
             
         return text.translate(translation_table)
 
-    def query(self, prompt, image_urls=[], model="qwen3.6-max-preview", safe_content=True, task_id=None, web_search=False):
+    def query(self, prompt, image_urls=None, model=None, safe_content=True, task_id=None, web_search=False):
         """
         Query the LLM with a prompt and optional image URLs.
         Selects the backend (GPT or Gemini) based on the model name.
 
         :param web_search: Enable web search for supported providers
         """
+        image_urls = image_urls if image_urls is not None else []
+        if not model:
+            model = Config.LLM_MODEL
+        if not model:
+            raise ValueError("未配置默认文本模型，请显式传入 model")
+
         if safe_content:
             prompt = self.full_to_half(prompt)
-
-        if not model:
-            model = "qwen3.6-max-preview"
             
         if Config.PRINT_MODEL_INPUT:
             lines = [

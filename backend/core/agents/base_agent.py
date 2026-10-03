@@ -5,7 +5,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Dict, Callable
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -72,17 +72,20 @@ class AgentInterface(ABC):
             raise ValueError(f"Missing required model configuration: {key}")
         return str(value)
 
-    def _cancellable_query(self, llm, prompt: str, image_urls=[], model="gemini-3-flash-preview", safe_content=True, task_id=None, web_search=False):
+    def _cancellable_query(self, llm, prompt: str, image_urls=None, model=None, safe_content=True, task_id=None, web_search=False):
         """在 LLM 调用前后检查取消状态"""
+        from config import settings
+
         self._check_cancel()
         # 将位置参数映射给 llm.query
-        result = llm.query(prompt, image_urls, model, safe_content, task_id, web_search)
+        result = llm.query(prompt, image_urls or [], model or settings.LLM_MODEL, safe_content, task_id, web_search)
         self._check_cancel()
         return result
 
     def _get_style_prompt(self, style_name: str) -> str:
         """从 prompts/style/{style_name}.txt 读取对应的视觉提示词"""
         import os
+
         from path_utils import absolute_path
 
         style_file = absolute_path(os.path.join('prompts', 'style', f"{style_name}.txt"))
