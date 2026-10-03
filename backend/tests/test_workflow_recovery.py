@@ -10,7 +10,9 @@ from fastapi import HTTPException
 
 import path_utils
 from api.routers import workflow
+from api.schemas.project import ProjectStartRequest
 from api.services.project_helpers import stream_workflow_task
+from core.agents.video_agent import VideoDirectorAgent
 from core.orchestrator import INTERRUPTED_STAGE_ERROR, WorkflowEngine, WorkflowStage, WorkflowState
 
 
@@ -69,6 +71,53 @@ def test_missing_session_is_not_created(tmp_path):
     with pytest.raises(KeyError, match="Session not found"):
         engine.prepare_stage_execution("missing", "script_generation", {})
     assert engine.sessions == {}
+
+
+@pytest.mark.parametrize("loader", ["startup", "lazy"])
+def test_legacy_session_fields_are_not_migrated(tmp_path, loader):
+    session_dir = tmp_path / "sessions"
+    session_dir.mkdir()
+    (session_dir / "old.json").write_text(
+        json.dumps({
+            "session_id": "old",
+            "current_stage": "video_generation",
+            "status": "waiting_intervention",
+            "stages_completed": ["script_generation"],
+            "llm_model": "old-model",
+            "video_model": "old-video-model",
+        }),
+        encoding="utf-8",
+    )
+    engine = _engine(session_dir)
+    if loader == "startup":
+        engine._load_sessions_from_disk()
+        state = engine.sessions["old"]
+    else:
+        state = engine.get_state("old")
+    assert state.meta == {}
+    assert state.status["script_generation"] == "pending"
+    assert state.status["video_generation"] == "pending"
+
+
+def test_main_video_model_requires_mode_specific_field():
+    with pytest.raises(ValueError, match="video_first_frame_model"):
+        VideoDirectorAgent._select_video_model({"video_model": "old-model"}, {})
+    assert "video_model" not in ProjectStartRequest.model_fields
+    assert not any(route.path.endswith("/status/from_disk") for route in workflow.router.routes)
+
+
+@pytest.mark.asyncio
+async def test_project_start_returns_only_mode_specific_video_models():
+    req = ProjectStartRequest(
+        idea="scene", llm_model="qwen3-max", vlm_model="qwen3.5-plus",
+        image_t2i_model="wan2.7-image", image_it2i_model="wan2.7-image",
+        video_first_frame_model="wan2.7-i2v",
+    )
+    with patch.object(workflow.workflow_engine, "create_session", return_value={"status": {}}) as create:
+        response = await workflow.start_project(req)
+    assert "video_model" not in response["params"]
+    assert "video_model" not in create.call_args.args[1]
+    assert response["params"]["video_first_frame_model"] == "wan2.7-i2v"
 
 
 @pytest.mark.asyncio
@@ -174,6 +223,7 @@ async def test_stream_completion_does_not_wait_fifteen_seconds():
         timeout=2.0,
     )
     assert events[-1]["type"] == "stage_complete"
+    assert "openclaw" not in events[-1]
 
 
 async def _collect_stream(engine, state):

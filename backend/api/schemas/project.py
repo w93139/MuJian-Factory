@@ -14,7 +14,6 @@ class ProjectStartRequest(BaseModel):
     vlm_model: Optional[str] = None
     image_t2i_model: Optional[str] = None
     image_it2i_model: Optional[str] = None
-    video_model: Optional[str] = None
     video_first_frame_model: Optional[str] = None
     video_start_end_model: Optional[str] = None
     video_reference_model: Optional[str] = None

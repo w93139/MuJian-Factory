@@ -246,7 +246,7 @@ class VideoDirectorAgent(AgentInterface):
         selected = asset.get("selected") or ""
         if selected and os.path.exists(absolute_path(selected)):
             return absolute_path(selected)
-        # Legacy session compatibility: some old artifacts only have versions and no selected field.
+        # A generated version may exist before a selection is recorded.
         for path in reversed(asset.get("versions") or []):
             if path and os.path.exists(absolute_path(path)):
                 return absolute_path(path)
@@ -321,10 +321,7 @@ class VideoDirectorAgent(AgentInterface):
         }.get(mode, "video_first_frame_model")
         model = input_data.get(model_key) or session_meta.get(model_key)
         if not model:
-            # Legacy session compatibility: sessions created before mode-specific video models only have video_model.
-            model = input_data.get("video_model") or session_meta.get("video_model")
-        if not model:
-            raise ValueError("Missing required model configuration: video_model")
+            raise ValueError(f"Missing required model configuration: {model_key}")
         return mode, model
 
     # ─── 预览 / Payload ───

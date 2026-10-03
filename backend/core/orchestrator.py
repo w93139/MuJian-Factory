@@ -55,52 +55,6 @@ STAGE_ORDER = [
     WorkflowStage.POST_PRODUCTION,
 ]
 
-SESSION_META_KEYS = (
-    "idea",
-    "user_textbox_input",
-    "style",
-    "video_ratio",
-    "video_resolution",
-    "expand_idea",
-    "llm_model",
-    "vlm_model",
-    "image_t2i_model",
-    "image_it2i_model",
-    "video_model",
-    "video_first_frame_model",
-    "video_start_end_model",
-    "video_reference_model",
-    "video_generation_mode",
-    "video_style",
-    "enable_concurrency",
-    "web_search",
-    "episodes",
-)
-
-
-def _normalize_meta_value(value: Any) -> Any:
-    if isinstance(value, str):
-        lower = value.lower()
-        if lower == "true":
-            return True
-        if lower == "false":
-            return False
-    return value
-
-
-def _extract_session_meta(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Restore session-level generation params from nested or legacy flat storage."""
-    meta: Dict[str, Any] = {}
-    nested_meta = data.get("meta")
-    if isinstance(nested_meta, dict):
-        meta.update({k: _normalize_meta_value(v) for k, v in nested_meta.items() if v is not None})
-    # Legacy session compatibility: old session JSON stored these fields at the root instead of under meta.
-    for key in SESSION_META_KEYS:
-        if key not in meta and key in data and data[key] is not None:
-            meta[key] = _normalize_meta_value(data[key])
-    return meta
-
-
 class WorkflowState:
     """工作流状态"""
 
@@ -191,22 +145,13 @@ class WorkflowEngine:
                     state.current_stage = WorkflowStage(stage_str) if stage_str else WorkflowStage.INIT
                     
                     loaded_status = data.get('status')
-                    if isinstance(loaded_status, str):
-                        stages_completed = data.get('stages_completed', [])
-                        for stage in WorkflowStage:
-                            if stage != WorkflowStage.INIT and stage != WorkflowStage.COMPLETED:
-                                if stage.value in stages_completed:
-                                    state.status[stage.value] = "completed"
-                                elif stage.value == state.current_stage.value:
-                                    state.status[stage.value] = loaded_status
-                                else:
-                                    state.status[stage.value] = "pending"
-                    elif isinstance(loaded_status, dict):
-                        state.status = loaded_status
+                    if isinstance(loaded_status, dict):
+                        state.status.update(loaded_status)
 
                     state.artifacts = data.get('artifacts', {})
                     state.stage_progress = data.get('stage_progress', {})
-                    state.meta = _extract_session_meta(data)
+                    saved_meta = data.get('meta')
+                    state.meta = saved_meta if isinstance(saved_meta, dict) else {}
                     state.error = data.get('error')
                     state.updated_at = data.get('updated_at', 0)
 
@@ -486,10 +431,12 @@ class WorkflowEngine:
                 
             all_sync_clips = []
             for ep in episodes:
-                if not isinstance(ep, dict): continue
+                if not isinstance(ep, dict):
+                    continue
                 ep_n = ep.get("episode_number", 0)
                 for s_i, seg in enumerate(ep.get("segments", []), 1):
-                    if not isinstance(seg, dict): continue
+                    if not isinstance(seg, dict):
+                        continue
                     seg_id = seg.get("segment_id", f"seg_{ep_n:02d}_{s_i:02d}")
                     
                     # 汇总 segment 级别的描述和时长
@@ -1041,7 +988,6 @@ class WorkflowEngine:
             if not state:
                 return {
                     "status": "error",
-                    "openclaw": "会话不存在，请刷新后重试。",
                     "message": "会话不存在",
                     "current_status": "missing",
                 }
@@ -1057,8 +1003,7 @@ class WorkflowEngine:
             if state.status.get(current_stage_str) == "running":
                 return {
                     "status": "waiting",
-                    "openclaw": f"当前阶段（{current_stage_str}）还在执行中，请等待完成后再调用 /continue。",
-                    "message": f"当前阶段（{current_stage_str}）还在执行中，请等待完成后再调用 /continue。",
+                    "message": f"当前阶段（{current_stage_str}）还在执行中，请等待完成。",
                     "current_status": "running",
                 }
 
@@ -1089,8 +1034,7 @@ class WorkflowEngine:
         # 其他状态（如 pending, stopped, error, completed）不允许继续
         return {
             "status": "error",
-            "openclaw": f"当前状态 {current_status} 不允许继续，请检查会话状态。",
-            "message": f"当前状态不允许继续",
+            "message": "当前状态不允许继续",
             "current_status": current_status,
         }
 
@@ -1410,16 +1354,11 @@ class WorkflowEngine:
 
             data["session_id"] = session_id
             if meta:
-                normalized_meta = {k: _normalize_meta_value(v) for k, v in meta.items() if v is not None}
                 if state:
-                    state.meta.update(normalized_meta)
+                    state.meta.update({k: v for k, v in meta.items() if v is not None})
             if "created_at" not in data:
                 data["created_at"] = time.time()
 
-            # Legacy session compatibility: clean root-level generation fields left by old session JSON.
-            for key in SESSION_META_KEYS:
-                data.pop(key, None)
-            
             # 2. 将内存中的最新 state 合并到 data 中
             if state:
                 data["current_stage"] = state.current_stage.value
@@ -1470,31 +1409,16 @@ class WorkflowEngine:
                 except ValueError:
                     state.current_stage = WorkflowStage.INIT
                 
-                # 旧版本兼容：状态名称转换及迁移
-                old_status = data.get("status", "pending")
-                if isinstance(old_status, str):
-                    if old_status == "waiting_intervention":
-                        old_status = "waiting"
-                    elif old_status == "completed":
-                        old_status = "completed"
-                    
-                    stages_completed = data.get("stages_completed", [])
-                    for stage in WorkflowStage:
-                        if stage != WorkflowStage.INIT and stage != WorkflowStage.COMPLETED:
-                            if stage.value in stages_completed:
-                                state.status[stage.value] = "completed"
-                            elif stage.value == state.current_stage.value:
-                                state.status[stage.value] = old_status
-                            else:
-                                state.status[stage.value] = "pending"
-                elif isinstance(old_status, dict):
-                    state.status = old_status
+                saved_status = data.get("status")
+                if isinstance(saved_status, dict):
+                    state.status.update(saved_status)
 
                 state.artifacts = data.get("artifacts", {})
                 state.stage_progress = data.get("stage_progress", {})
                 state.error = data.get("error")
                 state.updated_at = data.get("updated_at", 0)
-                state.meta = _extract_session_meta(data)
+                saved_meta = data.get("meta")
+                state.meta = saved_meta if isinstance(saved_meta, dict) else {}
                 self.sessions[sid] = state
                 if self._mark_interrupted_stages(state):
                     self.save_session_to_disk(sid)
