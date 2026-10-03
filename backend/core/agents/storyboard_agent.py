@@ -10,6 +10,7 @@ import re
 import json
 import asyncio
 import logging
+import threading
 from datetime import datetime
 from typing import Any, Optional, Callable, Dict, List, Tuple
 
@@ -1345,30 +1346,45 @@ class StoryboardAgent(AgentInterface):
             "persist": True,
         })
 
+        sibling_failed = threading.Event()
+        previous_cancellation_check = self.cancellation_check
+        self.set_cancellation_check(
+            lambda: sibling_failed.is_set()
+            or bool(previous_cancellation_check and previous_cancellation_check())
+        )
         results_queue = [asyncio.create_task(proc_ep(ep)) for ep in episodes_to_proc]
 
-        for coro in asyncio.as_completed(results_queue):
-            res = await coro
-            completed_count += 1
-            updated_ep_map[res["episode_number"]] = res
-            
-            # 每完成一集分镜，通过编排器更新内存并受控持久化
-            temp_eps = sorted(updated_ep_map.values(), key=lambda x: x["episode_number"])
-            
-            # 并发多集时只按已完成集数推进全局进度，避免各集内部进度互相覆盖。
-            pct = min(95, 10 + int(85 * completed_count / max(total_to_process, 1)))
-            report_storyboard_note(
-                f"已完成 {completed_count}/{total_to_process} 集分镜：第 {res['episode_number']} 集",
-                pct,
-                {
-                    "assets_preview": {
-                        "session_id": sid,
-                        "episodes": temp_eps,
-                        "created_at": datetime.now().isoformat(),
+        try:
+            for coro in asyncio.as_completed(results_queue):
+                res = await coro
+                completed_count += 1
+                updated_ep_map[res["episode_number"]] = res
+
+                # 每完成一集分镜，通过编排器更新内存并受控持久化
+                temp_eps = sorted(updated_ep_map.values(), key=lambda x: x["episode_number"])
+
+                # 并发多集时只按已完成集数推进全局进度，避免各集内部进度互相覆盖。
+                pct = min(95, 10 + int(85 * completed_count / max(total_to_process, 1)))
+                report_storyboard_note(
+                    f"已完成 {completed_count}/{total_to_process} 集分镜：第 {res['episode_number']} 集",
+                    pct,
+                    {
+                        "assets_preview": {
+                            "session_id": sid,
+                            "episodes": temp_eps,
+                            "created_at": datetime.now().isoformat(),
+                        },
+                        "persist": True,
                     },
-                    "persist": True,
-                },
-            )
+                )
+        except BaseException:
+            sibling_failed.set()
+            for task in results_queue:
+                task.cancel()
+            await asyncio.gather(*results_queue, return_exceptions=True)
+            raise
+        finally:
+            self.set_cancellation_check(previous_cancellation_check)
 
         final_all_episodes = sorted(updated_ep_map.values(), key=lambda x: x["episode_number"])
         
