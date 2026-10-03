@@ -2,7 +2,7 @@
 
 MIT License
 
-Copyright (c) 2026 Video-Claw
+Copyright (c) 2026 Video-Claw / FilmAgent (https://github.com/HITsz-TMG/FilmAgent)
 Copyright (c) 2026 XiaoYunQue (Innate Labs)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
