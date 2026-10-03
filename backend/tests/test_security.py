@@ -14,40 +14,38 @@ class ConfigSecurityTests(unittest.TestCase):
         self.config = {
             "server": {"host": "127.0.0.1", "port": 8000},
             "api_providers": {
-                "openai": {"api_key": "real-secret", "base_url": "https://example.com"},
-                "gemini": {"api_key": ""},
-                "deepseek": {"api_key": ""},
-                "dashscope": {"api_key": ""},
+                "openai_compatible": {"api_key": "sample-key", "base_url": "https://example.com"},
+                "dashscope": {"api_key": "sample-dashscope-key"},
                 "ark": {"api_key": ""},
-                "kling": {"access_key": "", "secret_key": ""},
             },
         }
 
     def test_public_config_never_contains_secret(self):
         public = redact_config(self.config)
 
-        self.assertEqual(public["api_providers"]["openai"]["api_key"], SECRET_MASK)
-        self.assertNotIn("real-secret", repr(public))
+        self.assertEqual(public["api_providers"]["openai_compatible"]["api_key"], SECRET_MASK)
+        self.assertEqual(public["api_providers"]["dashscope"]["api_key"], SECRET_MASK)
+        self.assertNotIn("sample-key", repr(public))
 
     def test_masked_secret_is_preserved_during_update(self):
         merged = merge_config_update(
             self.config,
             {
                 "server": {"port": 9000},
-                "api_providers": {"openai": {"api_key": SECRET_MASK}},
+                "api_providers": {"openai_compatible": {"api_key": SECRET_MASK}},
             },
         )
 
         self.assertEqual(merged["server"]["port"], 9000)
-        self.assertEqual(merged["api_providers"]["openai"]["api_key"], "real-secret")
+        self.assertEqual(merged["api_providers"]["openai_compatible"]["api_key"], "sample-key")
 
     def test_explicit_empty_secret_clears_value(self):
         merged = merge_config_update(
             self.config,
-            {"api_providers": {"openai": {"api_key": ""}}},
+            {"api_providers": {"openai_compatible": {"api_key": ""}}},
         )
 
-        self.assertEqual(merged["api_providers"]["openai"]["api_key"], "")
+        self.assertEqual(merged["api_providers"]["openai_compatible"]["api_key"], "")
 
 
 class PathSecurityTests(unittest.TestCase):

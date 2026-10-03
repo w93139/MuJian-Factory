@@ -8,37 +8,24 @@ api_providers:
   common:
     print_model_input: false
     proxy: ''
-  openai:
-    api_key: ''
-    base_url: https://api.openai.com/v1
-    enable_proxy: false
-  gemini:
-    api_key: ''
-    base_url: https://generativelanguage.googleapis.com/v1beta
-    enable_proxy: false
-  deepseek:
-    api_key: ''
-    base_url: https://api.deepseek.com/v1
-    enable_proxy: false
+    request_timeout: 180
   dashscope:
     api_key: ''
     base_url: https://dashscope.aliyuncs.com/api/v1
-    enable_proxy: false
+    compatible_base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   ark:
     api_key: ''
     base_url: https://ark.cn-beijing.volces.com/api/v3
-    enable_proxy: false
-  kling:
-    base_url: https://api-beijing.klingai.com
-    access_key: ''
-    secret_key: ''
-    enable_proxy: false
+  openai_compatible:
+    display_name: ''
+    api_key: ''
+    base_url: ''
+    models: []
 models:
-  llm: qwen3.5-plus
+  llm: qwen3-max
   vlm: qwen3.5-plus
   image_it2i: doubao-seedream-5-0-260128
   image_t2i: doubao-seedream-5-0-260128
-  video: wan2.7-i2v
   video_first_frame: wan2.7-i2v
   video_start_end: wan2.7-i2v
   video_reference: wan2.7-r2v

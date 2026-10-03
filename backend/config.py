@@ -14,14 +14,16 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 CONFIG_EXAMPLE_PATH = BASE_DIR / "config.yaml.example"
 SECRET_MASK = "********"
 SECRET_PATHS = (
-    "api_providers.openai.api_key",
-    "api_providers.gemini.api_key",
-    "api_providers.deepseek.api_key",
     "api_providers.dashscope.api_key",
     "api_providers.ark.api_key",
-    "api_providers.kling.access_key",
-    "api_providers.kling.secret_key",
+    "api_providers.openai_compatible.api_key",
 )
+ENV_CONFIG_PATHS = {
+    "DASHSCOPE_API_KEY": "api_providers.dashscope.api_key",
+    "ARK_API_KEY": "api_providers.ark.api_key",
+    "OPENAI_COMPAT_API_KEY": "api_providers.openai_compatible.api_key",
+    "OPENAI_COMPAT_BASE_URL": "api_providers.openai_compatible.base_url",
+}
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "project_name": "Mujian",
@@ -35,45 +37,29 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "common": {
             "print_model_input": False,
             "proxy": "",
-        },
-        "openai": {
-            "api_key": "",
-            "base_url": "https://api.openai.com/v1",
-            "enable_proxy": False,
-        },
-        "gemini": {
-            "api_key": "",
-            "base_url": "https://generativelanguage.googleapis.com/v1beta",
-            "enable_proxy": False,
-        },
-        "deepseek": {
-            "api_key": "",
-            "base_url": "https://api.deepseek.com/v1",
-            "enable_proxy": False,
+            "request_timeout": 180,
         },
         "dashscope": {
             "api_key": "",
             "base_url": "https://dashscope.aliyuncs.com/api/v1",
-            "enable_proxy": False,
+            "compatible_base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         },
         "ark": {
             "api_key": "",
             "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-            "enable_proxy": False,
         },
-        "kling": {
-            "base_url": "https://api-beijing.klingai.com",
-            "access_key": "",
-            "secret_key": "",
-            "enable_proxy": False,
+        "openai_compatible": {
+            "display_name": "",
+            "api_key": "",
+            "base_url": "",
+            "models": [],
         },
     },
     "models": {
-        "llm": "qwen3.5-plus",
+        "llm": "qwen3-max",
         "vlm": "qwen3.5-plus",
         "image_it2i": "doubao-seedream-5-0-260128",
         "image_t2i": "doubao-seedream-5-0-260128",
-        "video": "wan2.7-i2v",
         "video_first_frame": "wan2.7-i2v",
         "video_start_end": "wan2.7-i2v",
         "video_reference": "wan2.7-r2v",
@@ -137,24 +123,33 @@ def merge_config_update(current: Dict[str, Any], updates: Dict[str, Any]) -> Dic
 
 
 def _coerce_config(data: Dict[str, Any]) -> Dict[str, Any]:
-    clean = _deep_merge(DEFAULT_CONFIG, data)
-    clean.pop("llm", None)
-    raw_server = data.get("server", {}) if isinstance(data, dict) else {}
+    unknown: list[str] = []
 
-    legacy_models = data.get("models", {}) if isinstance(data, dict) else {}
-    if isinstance(legacy_models, dict):
-        for legacy_key in ("style", "video_ratio", "video_resolution"):
-            # Legacy config compatibility: older config.yaml stored generation settings under models.*.
-            if legacy_key in legacy_models and not _get(data, f"generation.{legacy_key}"):
-                clean.setdefault("generation", {})[legacy_key] = legacy_models[legacy_key]
-            clean["models"].pop(legacy_key, None)
-        if legacy_models.get("video") and not any(
-            legacy_models.get(key) for key in ("video_first_frame", "video_start_end", "video_reference")
-        ):
-            # Legacy config compatibility: older configs had one models.video instead of mode-specific video models.
-            clean["models"]["video_first_frame"] = legacy_models["video"]
-        # Legacy config compatibility: models.eval was never used by runtime agents; keep it out after load.
-        clean["models"].pop("eval", None)
+    def known_values(source: Dict[str, Any], defaults: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+        result = {}
+        for key, value in source.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if key not in defaults:
+                unknown.append(path)
+            elif isinstance(defaults[key], dict):
+                if isinstance(value, dict):
+                    result[key] = known_values(value, defaults[key], path)
+                else:
+                    unknown.append(path)
+            elif isinstance(defaults[key], list):
+                if isinstance(value, list):
+                    result[key] = value
+                else:
+                    unknown.append(path)
+            elif isinstance(value, (dict, list)):
+                unknown.append(path)
+            else:
+                result[key] = value
+        return result
+
+    clean = _deep_merge(DEFAULT_CONFIG, known_values(data, DEFAULT_CONFIG))
+    if unknown:
+        logger.warning("Ignoring unknown configuration fields: %s", ", ".join(unknown))
 
     server = clean["server"]
     server["host"] = str(server.get("host") or DEFAULT_CONFIG["server"]["host"])
@@ -162,22 +157,16 @@ def _coerce_config(data: Dict[str, Any]) -> Dict[str, Any]:
         server["port"] = int(server.get("port"))
     except (TypeError, ValueError):
         server["port"] = DEFAULT_CONFIG["server"]["port"]
-    server["log_level"] = _normalize_log_level(
-        server.get("log_level") if isinstance(raw_server, dict) and "log_level" in raw_server else None,
-        server.get("debug"),
-    )
-    server.pop("debug", None)
+    server["log_level"] = _normalize_log_level(server.get("log_level"))
     server["access_log"] = _as_bool(server.get("access_log"))
-    server.pop("admin_password", None)
 
     common = clean["api_providers"]["common"]
-    for key in ("local_proxy", "http_proxy", "https_proxy"):
-        common.pop(key, None)
     common["print_model_input"] = _as_bool(common.get("print_model_input"))
     common["proxy"] = str(common.get("proxy") or "")
-
-    if isinstance(clean["models"].get("llm"), dict):
-        clean["models"]["llm"] = clean["models"]["llm"].get("model") or DEFAULT_CONFIG["models"]["llm"]
+    try:
+        common["request_timeout"] = max(1, int(common.get("request_timeout")))
+    except (TypeError, ValueError):
+        common["request_timeout"] = DEFAULT_CONFIG["api_providers"]["common"]["request_timeout"]
 
     for key, value in clean["models"].items():
         if isinstance(value, dict):
@@ -193,10 +182,18 @@ def _coerce_config(data: Dict[str, Any]) -> Dict[str, Any]:
         if provider == "common":
             continue
         for key, value in values.items():
-            if key == "enable_proxy":
-                values[key] = _as_bool(value)
-            else:
-                values[key] = "" if value is None else str(value)
+            if provider == "openai_compatible" and key == "models":
+                values[key] = [
+                    {
+                        "id": str(item.get("id") or ""),
+                        "type": [str(kind) for kind in item.get("type", [])] if isinstance(item.get("type"), list) else [],
+                        "name": str(item.get("name") or ""),
+                    }
+                    for item in value
+                    if isinstance(item, dict) and item.get("id")
+                ]
+                continue
+            values[key] = "" if value is None else str(value)
 
     return clean
 
@@ -207,28 +204,37 @@ def _as_bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _normalize_log_level(value: Any, legacy_debug: Any = None) -> str:
+def _normalize_log_level(value: Any) -> str:
     allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-    if legacy_debug is not None and (value is None or str(value).strip() == ""):
-        return "DEBUG" if _as_bool(legacy_debug) else "INFO"
     normalized = str(value or DEFAULT_CONFIG["server"]["log_level"]).strip().upper()
     return normalized if normalized in allowed else DEFAULT_CONFIG["server"]["log_level"]
 
 
-def load_config() -> Dict[str, Any]:
+def _with_env_overrides(values: Dict[str, Any]) -> Dict[str, Any]:
+    effective = copy.deepcopy(values)
+    for variable, path in ENV_CONFIG_PATHS.items():
+        if variable in os.environ:
+            _set(effective, path, os.environ[variable])
+    return effective
+
+
+def load_config(*, apply_env: bool = True) -> Dict[str, Any]:
     if not CONFIG_PATH.exists():
         source = CONFIG_EXAMPLE_PATH if CONFIG_EXAMPLE_PATH.exists() else None
         if source:
             with source.open("r", encoding="utf-8") as f:
                 loaded = yaml.safe_load(f) or {}
-            return _coerce_config(loaded)
-        return copy.deepcopy(DEFAULT_CONFIG)
+            clean = _coerce_config(loaded)
+        else:
+            clean = copy.deepcopy(DEFAULT_CONFIG)
+        return _with_env_overrides(clean) if apply_env else clean
 
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         loaded = yaml.safe_load(f) or {}
     if not isinstance(loaded, dict):
         raise ValueError("backend/config.yaml must contain a YAML mapping.")
-    return _coerce_config(loaded)
+    clean = _coerce_config(loaded)
+    return _with_env_overrides(clean) if apply_env else clean
 
 
 def save_config(values: Dict[str, Any]) -> Dict[str, Any]:
@@ -259,34 +265,19 @@ class Config:
 
     PRINT_MODEL_INPUT = _get(CONFIG, "api_providers.common.print_model_input")
     PROXY = _get(CONFIG, "api_providers.common.proxy")
+    REQUEST_TIMEOUT = _get(CONFIG, "api_providers.common.request_timeout")
 
-    OPENAI_API_KEY = _get(CONFIG, "api_providers.openai.api_key")
-    OPENAI_BASE_URL = _get(CONFIG, "api_providers.openai.base_url")
-    OPENAI_ENABLE_PROXY = _get(CONFIG, "api_providers.openai.enable_proxy")
-    GEMINI_API_KEY = _get(CONFIG, "api_providers.gemini.api_key")
-    GOOGLE_GEMINI_BASE_URL = _get(CONFIG, "api_providers.gemini.base_url")
-    GEMINI_ENABLE_PROXY = _get(CONFIG, "api_providers.gemini.enable_proxy")
-    DEEPSEEK_API_KEY = _get(CONFIG, "api_providers.deepseek.api_key")
-    DEEPSEEK_BASE_URL = _get(CONFIG, "api_providers.deepseek.base_url")
-    DEEPSEEK_ENABLE_PROXY = _get(CONFIG, "api_providers.deepseek.enable_proxy")
     DASHSCOPE_API_KEY = _get(CONFIG, "api_providers.dashscope.api_key")
     DASHSCOPE_BASE_URL = _get(CONFIG, "api_providers.dashscope.base_url")
-    DASHSCOPE_ENABLE_PROXY = _get(CONFIG, "api_providers.dashscope.enable_proxy")
+    DASHSCOPE_COMPATIBLE_BASE_URL = _get(CONFIG, "api_providers.dashscope.compatible_base_url")
     ARK_API_KEY = _get(CONFIG, "api_providers.ark.api_key")
     ARK_BASE_URL = _get(CONFIG, "api_providers.ark.base_url")
-    ARK_ENABLE_PROXY = _get(CONFIG, "api_providers.ark.enable_proxy")
-    KLING_ACCESS_KEY = _get(CONFIG, "api_providers.kling.access_key")
-    KLING_SECRET_KEY = _get(CONFIG, "api_providers.kling.secret_key")
-    KLING_BASE_URL = _get(CONFIG, "api_providers.kling.base_url")
-    KLING_ENABLE_PROXY = _get(CONFIG, "api_providers.kling.enable_proxy")
-
-    LLM_API_KEY = DASHSCOPE_API_KEY
-    LLM_BASE_URL = ""
+    OPENAI_COMPAT_API_KEY = _get(CONFIG, "api_providers.openai_compatible.api_key")
+    OPENAI_COMPAT_BASE_URL = _get(CONFIG, "api_providers.openai_compatible.base_url")
     LLM_MODEL = _get(CONFIG, "models.llm")
     VLM_MODEL = _get(CONFIG, "models.vlm")
     IMAGE_IT2I_MODEL = _get(CONFIG, "models.image_it2i")
     IMAGE_T2I_MODEL = _get(CONFIG, "models.image_t2i")
-    VIDEO_MODEL = _get(CONFIG, "models.video")
     VIDEO_FIRST_FRAME_MODEL = _get(CONFIG, "models.video_first_frame")
     VIDEO_START_END_MODEL = _get(CONFIG, "models.video_start_end")
     VIDEO_REFERENCE_MODEL = _get(CONFIG, "models.video_reference")
@@ -312,9 +303,15 @@ class Config:
         return redact_config(cls.CONFIG)
 
     @classmethod
+    def provider_config(cls, provider: str) -> Dict[str, Any]:
+        """Return the effective settings for a supported provider."""
+        if provider not in {"dashscope", "ark", "openai_compatible"}:
+            raise ValueError(f"Unsupported provider: {provider}")
+        return copy.deepcopy(_get(cls.CONFIG, f"api_providers.{provider}", {}))
+
+    @classmethod
     def provider_proxy(cls, provider: str) -> str:
-        provider_config = _get(cls.CONFIG, f"api_providers.{provider}", {})
-        if not isinstance(provider_config, dict) or not _as_bool(provider_config.get("enable_proxy")):
+        if provider not in {"dashscope", "ark", "openai_compatible"}:
             return ""
         return cls.PROXY or ""
 
@@ -327,52 +324,39 @@ class Config:
 
     @classmethod
     def update_config(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        clean = save_config(merge_config_update(cls.CONFIG, values))
-        cls.CONFIG = clean
+        clean = save_config(merge_config_update(load_config(apply_env=False), values))
+        cls.CONFIG = _with_env_overrides(clean)
+        effective = cls.CONFIG
 
-        cls.HOST = _get(clean, "server.host")
-        cls.PORT = _get(clean, "server.port")
-        cls.LOG_LEVEL = _get(clean, "server.log_level")
+        cls.HOST = _get(effective, "server.host")
+        cls.PORT = _get(effective, "server.port")
+        cls.LOG_LEVEL = _get(effective, "server.log_level")
         cls.DEBUG = cls.LOG_LEVEL == "DEBUG"
-        cls.ACCESS_LOG = _get(clean, "server.access_log")
+        cls.ACCESS_LOG = _get(effective, "server.access_log")
 
-        cls.PRINT_MODEL_INPUT = _get(clean, "api_providers.common.print_model_input")
-        cls.PROXY = _get(clean, "api_providers.common.proxy")
+        cls.PRINT_MODEL_INPUT = _get(effective, "api_providers.common.print_model_input")
+        cls.PROXY = _get(effective, "api_providers.common.proxy")
+        cls.REQUEST_TIMEOUT = _get(effective, "api_providers.common.request_timeout")
 
-        cls.OPENAI_API_KEY = _get(clean, "api_providers.openai.api_key")
-        cls.OPENAI_BASE_URL = _get(clean, "api_providers.openai.base_url")
-        cls.OPENAI_ENABLE_PROXY = _get(clean, "api_providers.openai.enable_proxy")
-        cls.GEMINI_API_KEY = _get(clean, "api_providers.gemini.api_key")
-        cls.GOOGLE_GEMINI_BASE_URL = _get(clean, "api_providers.gemini.base_url")
-        cls.GEMINI_ENABLE_PROXY = _get(clean, "api_providers.gemini.enable_proxy")
-        cls.DEEPSEEK_API_KEY = _get(clean, "api_providers.deepseek.api_key")
-        cls.DEEPSEEK_BASE_URL = _get(clean, "api_providers.deepseek.base_url")
-        cls.DEEPSEEK_ENABLE_PROXY = _get(clean, "api_providers.deepseek.enable_proxy")
-        cls.DASHSCOPE_API_KEY = _get(clean, "api_providers.dashscope.api_key")
-        cls.DASHSCOPE_BASE_URL = _get(clean, "api_providers.dashscope.base_url")
-        cls.DASHSCOPE_ENABLE_PROXY = _get(clean, "api_providers.dashscope.enable_proxy")
-        cls.ARK_API_KEY = _get(clean, "api_providers.ark.api_key")
-        cls.ARK_BASE_URL = _get(clean, "api_providers.ark.base_url")
-        cls.ARK_ENABLE_PROXY = _get(clean, "api_providers.ark.enable_proxy")
-        cls.KLING_ACCESS_KEY = _get(clean, "api_providers.kling.access_key")
-        cls.KLING_SECRET_KEY = _get(clean, "api_providers.kling.secret_key")
-        cls.KLING_BASE_URL = _get(clean, "api_providers.kling.base_url")
-        cls.KLING_ENABLE_PROXY = _get(clean, "api_providers.kling.enable_proxy")
+        cls.DASHSCOPE_API_KEY = _get(effective, "api_providers.dashscope.api_key")
+        cls.DASHSCOPE_BASE_URL = _get(effective, "api_providers.dashscope.base_url")
+        cls.DASHSCOPE_COMPATIBLE_BASE_URL = _get(effective, "api_providers.dashscope.compatible_base_url")
+        cls.ARK_API_KEY = _get(effective, "api_providers.ark.api_key")
+        cls.ARK_BASE_URL = _get(effective, "api_providers.ark.base_url")
+        cls.OPENAI_COMPAT_API_KEY = _get(effective, "api_providers.openai_compatible.api_key")
+        cls.OPENAI_COMPAT_BASE_URL = _get(effective, "api_providers.openai_compatible.base_url")
 
-        cls.LLM_API_KEY = cls.DASHSCOPE_API_KEY
-        cls.LLM_BASE_URL = ""
-        cls.LLM_MODEL = _get(clean, "models.llm")
-        cls.VLM_MODEL = _get(clean, "models.vlm")
-        cls.IMAGE_IT2I_MODEL = _get(clean, "models.image_it2i")
-        cls.IMAGE_T2I_MODEL = _get(clean, "models.image_t2i")
-        cls.VIDEO_MODEL = _get(clean, "models.video")
-        cls.VIDEO_FIRST_FRAME_MODEL = _get(clean, "models.video_first_frame")
-        cls.VIDEO_START_END_MODEL = _get(clean, "models.video_start_end")
-        cls.VIDEO_REFERENCE_MODEL = _get(clean, "models.video_reference")
-        cls.VIDEO_RATIO = _get(clean, "generation.video_ratio")
-        cls.VIDEO_RESOLUTION = _get(clean, "generation.video_resolution")
-        cls.VIDEO_GENERATION_MODE = _get(clean, "generation.video_generation_mode")
-        cls.STYLE = _get(clean, "generation.style")
+        cls.LLM_MODEL = _get(effective, "models.llm")
+        cls.VLM_MODEL = _get(effective, "models.vlm")
+        cls.IMAGE_IT2I_MODEL = _get(effective, "models.image_it2i")
+        cls.IMAGE_T2I_MODEL = _get(effective, "models.image_t2i")
+        cls.VIDEO_FIRST_FRAME_MODEL = _get(effective, "models.video_first_frame")
+        cls.VIDEO_START_END_MODEL = _get(effective, "models.video_start_end")
+        cls.VIDEO_REFERENCE_MODEL = _get(effective, "models.video_reference")
+        cls.VIDEO_RATIO = _get(effective, "generation.video_ratio")
+        cls.VIDEO_RESOLUTION = _get(effective, "generation.video_resolution")
+        cls.VIDEO_GENERATION_MODE = _get(effective, "generation.video_generation_mode")
+        cls.STYLE = _get(effective, "generation.style")
         return cls.as_dict()
 
     @classmethod
