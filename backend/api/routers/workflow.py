@@ -12,6 +12,7 @@ from api.services.project_helpers import (
     stream_workflow_task,
 )
 from config import settings
+from core.orchestrator import STAGE_ORDER, WorkflowStage
 
 router = APIRouter(tags=["Workflow"])
 
@@ -108,11 +109,20 @@ async def start_project(req: ProjectStartRequest):
 @router.post("/api/project/{session_id}/execute/{stage}")
 async def execute_stage(session_id: str, stage: str, request: Request):
     try:
+        stage_enum = WorkflowStage(stage)
+    except ValueError as exc:
+        raise HTTPException(400, f"Invalid workflow stage: {stage}") from exc
+    if stage_enum not in STAGE_ORDER:
+        raise HTTPException(400, f"Invalid executable stage: {stage}")
+    try:
         body = await request.json()
     except Exception:
         body = {}
 
-    state, input_data = workflow_engine.prepare_stage_execution(session_id, stage, body)
+    try:
+        state, input_data = workflow_engine.prepare_stage_execution(session_id, stage, body)
+    except KeyError as exc:
+        raise HTTPException(404, "Session not found") from exc
     _require_model_fields(input_data)
 
     cancellation_check, on_disconnect = make_cancellation(workflow_engine, session_id)

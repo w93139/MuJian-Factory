@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 ARTIFACT_IMAGE_LIMIT = 25 * 1024 * 1024
 UPLOAD_CHUNK_SIZE = 1024 * 1024
 SAFE_ARTIFACT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+INTERRUPTED_STAGE_ERROR = "服务重启导致中断，请重新执行该阶段"
 
 
 class WorkflowStage(str, Enum):
@@ -206,10 +207,13 @@ class WorkflowEngine:
                     state.artifacts = data.get('artifacts', {})
                     state.stage_progress = data.get('stage_progress', {})
                     state.meta = _extract_session_meta(data)
+                    state.error = data.get('error')
                     state.updated_at = data.get('updated_at', 0)
 
                     # 缓存到内存
                     self.sessions[session_id] = state
+                    if self._mark_interrupted_stages(state):
+                        self.save_session_to_disk(session_id)
                     return state
                 except json.JSONDecodeError as e:
                     logger.warning(f"Session file {session_id} is corrupted, ignoring: {e}")
@@ -282,7 +286,9 @@ class WorkflowEngine:
     def prepare_stage_execution(self, session_id: str, stage: str, body: Dict[str, Any]) -> tuple[WorkflowState, Dict[str, Any]]:
         """Build stage input from current meta/artifacts without exposing mutable state to routers."""
         with self._state_lock:
-            state = self.get_or_create_state(session_id)
+            state = self.get_state(session_id)
+            if state is None:
+                raise KeyError(f"Session not found: {session_id}")
             input_data = copy.deepcopy(body) if isinstance(body, dict) else {}
             input_data["session_id"] = session_id
 
@@ -620,7 +626,7 @@ class WorkflowEngine:
             s_val = stage.value
             # 如果当前阶段正在运行，不自动覆盖其为 completed/waiting (除非它目前是空)
             current_s_status = state.status.get(s_val, "pending")
-            if current_s_status == "running" or current_s_status == "error":
+            if current_s_status in {"running", "error", "failed"}:
                 continue
 
             art = state.artifacts.get(s_val)
@@ -903,6 +909,7 @@ class WorkflowEngine:
                 active_registered = True
                 state.current_stage = stage
                 state.status[stage.value] = "running"
+                state.error = None
                 state.updated_at = datetime.now()
                 state.stage_progress[stage.value] = {
                     "phase": stage.value,
@@ -1484,10 +1491,32 @@ class WorkflowEngine:
                 state.updated_at = data.get("updated_at", 0)
                 state.meta = _extract_session_meta(data)
                 self.sessions[sid] = state
+                if self._mark_interrupted_stages(state):
+                    self.save_session_to_disk(sid)
             except json.JSONDecodeError:
                 logger.warning(f"Skipping corrupted session file: {filename}")
             except Exception as e:
                 logger.warning(f"Failed to load session {filename}: {e}")
+
+    @staticmethod
+    def _mark_interrupted_stages(state: WorkflowState) -> bool:
+        """A saved running stage cannot resume after the process has stopped."""
+        interrupted = [stage for stage, status in state.status.items() if status == "running"]
+        if not interrupted:
+            return False
+        for stage in interrupted:
+            state.status[stage] = "failed"
+            progress = state.stage_progress.get(stage, {})
+            state.stage_progress[stage] = {
+                **progress,
+                "phase": stage,
+                "step": "执行失败",
+                "message": INTERRUPTED_STAGE_ERROR,
+                "updated_at": time.time(),
+            }
+        state.error = INTERRUPTED_STAGE_ERROR
+        state.updated_at = datetime.now()
+        return True
 
     def delete_session(self, session_id: str) -> bool:
         """删除指定会话（内存 + 磁盘 + 结果文件）"""

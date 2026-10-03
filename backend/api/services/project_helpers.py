@@ -73,9 +73,8 @@ async def stream_workflow_task(
     include_payload_summary: bool = False,
     on_disconnect: Optional[Callable[[], None]] = None,
 ) -> AsyncIterator[str]:
-    stage_enum = WorkflowStage(stage)
-
     try:
+        stage_enum = WorkflowStage(stage)
         task = asyncio.create_task(
             workflow_engine.execute_stage(
                 state,
@@ -89,7 +88,7 @@ async def stream_workflow_task(
 
         while not task.done():
             try:
-                await asyncio.wait_for(event_trigger.wait(), timeout=15.0)
+                await asyncio.wait_for(event_trigger.wait(), timeout=1.0)
             except asyncio.TimeoutError:
                 yield json.dumps({"type": "heartbeat", "time": time.time()}) + "\n"
 
