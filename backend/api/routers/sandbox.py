@@ -400,6 +400,7 @@ async def sandbox_i2i(req: SandboxI2IRequest):
 async def sandbox_video(req: SandboxVideoRequest):
     """临时工作台 - 视频生成"""
     from models.video_client import VideoClient
+    from models.video_params import normalize_video_params
     client = VideoClient()
     image = _validated_media_reference(req.image) if req.image else None
     input_data = {"prompt": req.prompt, "reference_image": image}
@@ -410,6 +411,7 @@ async def sandbox_video(req: SandboxVideoRequest):
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, f"{uuid.uuid4().hex[:8]}.mp4")
         logger.info("Sandbox video started: model=%s image=%s", req.model, bool(req.image))
+        normalized = normalize_video_params(req.model, 5, "720P", "16:9")
 
         result = await run_in_threadpool(
             client.generate_video,
@@ -417,7 +419,9 @@ async def sandbox_video(req: SandboxVideoRequest):
             image_path=image or "",
             save_path=save_path,
             model=req.model,
-            duration=5,
+            duration=normalized.duration,
+            video_ratio=normalized.ratio,
+            resolution=normalized.resolution,
             shot_type="multi",
         )
         # 保存到历史记录

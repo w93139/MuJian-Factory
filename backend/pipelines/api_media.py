@@ -1,16 +1,13 @@
 import logging
 from typing import Any, Optional
 
-from models.image_client import ImageClient
 from models.config_model import (
-    image_capabilities,
     list_api_models,
-    media_capabilities,
-    model_ability_tags,
     parse_api_model,
-    video_capabilities,
 )
+from models.image_client import ImageClient
 from models.video_client import VideoClient
+from models.video_params import normalize_video_params
 
 logger = logging.getLogger(__name__)
 
@@ -29,17 +26,6 @@ def list_api_workflows(
 
 def parse_api_workflow(workflow: str, media_type: str) -> tuple[str, str]:
     return parse_api_model(workflow, media_type)
-
-
-def normalize_video_duration(provider: str, model: str, duration: int) -> int:
-    contract = video_capabilities(provider, model).get("duration") or {}
-    if contract.get("verified"):
-        return min(max(int(duration), int(contract.get("min", duration))), int(contract.get("max", duration)))
-    if provider == "dashscope":
-        return 10 if duration >= 8 else 5
-    if provider == "seedance" or "seedance" in (model or "").lower():
-        return min(max(duration, 5), 10)
-    return max(duration, 1)
 
 
 def generate_image_api(
@@ -86,13 +72,16 @@ def generate_video_api(
     **params,
 ) -> str:
     provider, resolved_model = parse_api_workflow(model, "video")
-    safe_duration = normalize_video_duration(provider, resolved_model, int(duration))
+    legacy_resolution = params.pop("resolution", None)
+    normalized = normalize_video_params(
+        resolved_model, duration, video_resolution or legacy_resolution, video_ratio
+    )
     logger.info(
         "Generating API video: provider=%s model=%s duration=%ss ratio=%s output=%s",
         provider or "unknown",
         resolved_model,
-        safe_duration,
-        video_ratio,
+        normalized.duration,
+        normalized.ratio,
         output_path,
     )
     VideoClient().generate_video(
@@ -100,9 +89,9 @@ def generate_video_api(
         image_path=image_path,
         save_path=output_path,
         model=resolved_model,
-        duration=safe_duration,
-        video_ratio=video_ratio,
-        resolution=video_resolution or params.pop("resolution", None),
+        duration=normalized.duration,
+        video_ratio=normalized.ratio,
+        resolution=normalized.resolution,
         **params,
     )
     return output_path

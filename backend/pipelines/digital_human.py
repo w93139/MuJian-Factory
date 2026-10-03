@@ -1,11 +1,12 @@
+import logging
 import os
 import re
-import logging
 
+from models.config_model import video_capabilities
 from models.llm_client import LLM
+from models.video_params import normalize_video_params
 
-from .api_media import generate_image_api, generate_video_api
-from .api_media import parse_api_workflow
+from .api_media import generate_image_api, generate_video_api, parse_api_workflow
 from .storage import append_artifact, task_output_dir, update_task
 from .tts import generate_edge_tts
 from .utils import (
@@ -21,7 +22,6 @@ from .utils import (
     write_json,
     write_text,
 )
-from models.config_model import video_capabilities
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +116,7 @@ async def run(task_id: str, params: dict) -> tuple[dict, list[dict]]:
     provider, resolved_video_model = parse_api_workflow(video_model, "video")
     duration_contract = video_capabilities(provider, resolved_video_model).get("duration") or {}
     max_duration = int(duration_contract.get("max") or 10)
-    min_duration = int(duration_contract.get("min") or 2)
-    segment_seconds = max(min_duration, max_duration)
+    segment_seconds = max_duration
     narration_sentences = split_by_periods(goods_text) or [goods_text]
     logger.info(
         "Digital-human narration split: task_id=%s sentences=%d model=%s max_segment=%ss",
@@ -201,13 +200,18 @@ async def run(task_id: str, params: dict) -> tuple[dict, list[dict]]:
             message=f"Calling digital-human video API {idx}/{len(audio_segments)}",
         )
         segment_duration = media_duration_seconds(segment_audio_path) or audio_duration or max_duration
-        safe_segment_duration = max(min_duration, min(max_duration, int(round(segment_duration))))
+        normalized = normalize_video_params(
+            resolved_video_model,
+            segment_duration,
+            params.get("video_resolution") or params.get("resolution"),
+            params.get("video_ratio") or "9:16",
+        )
         logger.info(
             "Generating digital-human video segment %d/%d: audio=%s duration=%ss tail_frame=%s",
             idx,
             len(audio_segments),
             segment_audio_path,
-            safe_segment_duration,
+            normalized.duration,
             bool(tail_frame),
         )
         segment_video_path = os.path.join(output_dir, f"video_part_{idx:02d}.mp4")
@@ -218,13 +222,13 @@ async def run(task_id: str, params: dict) -> tuple[dict, list[dict]]:
             model=video_model,
             output_path=segment_video_path,
             image_path=tail_frame,
-            duration=safe_segment_duration,
-            video_ratio=params.get("video_ratio") or "9:16",
+            duration=normalized.duration,
+            video_ratio=normalized.ratio,
             reference_image_paths=segment_reference_images,
             reference_audio_path=segment_audio_path,
             audio=True,
             negative_prompt=params.get("negative_prompt"),
-            video_resolution=params.get("video_resolution") or params.get("resolution"),
+            video_resolution=normalized.resolution,
             watermark=params.get("watermark"),
             prompt_extend=params.get("prompt_extend"),
         )

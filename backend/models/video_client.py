@@ -11,6 +11,7 @@ from typing import Optional
 from config import Config
 from models.config_model import get_model_config
 from models.video_dashscope import DashscopeVideoClient
+from models.video_params import normalize_video_params
 from models.video_seedance import SeedanceVideoClient
 from path_utils import absolute_path, media_reference_path
 
@@ -101,8 +102,10 @@ class VideoClient:
         audio_path = media_reference_path(audio_path)
         model = model or Config.VIDEO_FIRST_FRAME_MODEL
 
-        # 确保 duration 是整数,视频模型通常要求整数秒
-        duration = int(duration)
+        normalized = normalize_video_params(model, duration, resolution, video_ratio)
+        duration = normalized.duration
+        resolution = normalized.resolution
+        video_ratio = normalized.ratio
 
         if Config.PRINT_MODEL_INPUT:
             lines = [
@@ -187,11 +190,6 @@ class VideoClient:
             raise RuntimeError(f"视频生成没有返回结果: model={model}")
         return result
 
-    @staticmethod
-    def _normalize_seedance_resolution(resolution: Optional[str]) -> str:
-        value = (resolution or "720p").strip().lower()
-        return value if value in {"720p", "1080p"} else "720p"
-
     def _generate_wan(
         self,
         prompt: str,
@@ -265,7 +263,7 @@ class VideoClient:
             model=model,
             duration=duration,
             ratio=video_ratio,
-            resolution=self._normalize_seedance_resolution(resolution),
+            resolution=resolution,
             seed=seed,
             watermark=watermark,
             generate_audio=generate_audio,

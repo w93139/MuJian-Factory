@@ -86,17 +86,20 @@ class VideoDirectorAgent(AgentInterface):
         save_path = self._next_version_path(sid, segment_id)
         try:
             from models.video_client import VideoClient
+            from models.video_params import normalize_video_params
+
+            normalized = normalize_video_params(video_model, duration, video_resolution, video_ratio)
             client = VideoClient()
             client.generate_video(
                 prompt=prompt,
                 image_path=img_path,
                 save_path=save_path,
                 model=video_model,
-                duration=duration,
+                duration=normalized.duration,
                 sound=sound,
                 shot_type=shot_type,
-                video_ratio=video_ratio,
-                resolution=video_resolution,
+                video_ratio=normalized.ratio,
+                resolution=normalized.resolution,
                 last_image_path=last_image_path if video_generation_mode == "start_end_frame" else None,
                 reference_image_paths=reference_image_paths if video_generation_mode == "reference" else None,
             )
