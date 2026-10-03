@@ -32,7 +32,7 @@ export const STYLES = [
     { id: 'anime', label: 'Anime / 动漫' },
     { id: 'realistic', label: 'Realistic / 写实' },
     { id: '3d-disney', label: '3D Disney / 迪士尼' },
-    { id: 'watercolor', label: 'Watercolor / 水彩' },
+    { id: 'cartoon', label: 'Cartoon / 卡通' },
     { id: 'oil-painting', label: 'Oil Painting / 油画' },
     { id: 'cyberpunk', label: 'Cyberpunk / 赛博朋克' },
     { id: 'chinese-ink', label: 'Chinese Ink / 水墨' },
