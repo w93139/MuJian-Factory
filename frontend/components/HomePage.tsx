@@ -14,6 +14,7 @@ import {
 } from '@/config/models';
 import { STAGES } from './TopBar';
 import { fetchModelGroupsByType, fetchVideoModelGroupsByAbility } from '@/lib/modelRegistry';
+import { fetchAppConfig } from '@/lib/workflowApi';
 
 export interface ProjectParams {
   idea: string;
@@ -154,15 +155,12 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
       setConfigLoading(true);
       setConfigError('');
       try {
-        const resp = await fetch('/api/config');
-        if (!resp.ok) throw new Error('读取默认模型配置失败');
-        const data = await resp.json();
+        const data = await fetchAppConfig();
         const models = data.config?.models || {};
         const generation = data.config?.generation || {};
-        // Legacy config compatibility: older config.yaml only has models.video, so treat it as first-frame video.
-        const firstFrameModel = models.video_first_frame || models.video;
-        const startEndModel = models.video_start_end || 'wan2.7-i2v';
-        const referenceModel = models.video_reference || 'wan2.7-r2v';
+        const firstFrameModel = models.video_first_frame || '';
+        const startEndModel = models.video_start_end || '';
+        const referenceModel = models.video_reference || '';
         const videoMode = (generation.video_generation_mode || 'first_frame') as VideoGenerationMode;
         const selectedModel = videoMode === 'start_end_frame' ? startEndModel : videoMode === 'reference' ? referenceModel : firstFrameModel;
         if (!models.llm || !models.vlm || !models.image_t2i || !models.image_it2i || !selectedModel) {

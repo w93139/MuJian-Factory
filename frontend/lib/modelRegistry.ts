@@ -4,10 +4,7 @@ import { fetchApiModels } from '@/lib/workflowApi';
 const PROVIDER_LABELS: Record<string, string> = {
   dashscope: 'DashScope',
   ark: 'ARK (Volcengine)',
-  deepseek: 'DeepSeek',
-  openai: 'OpenAI',
-  gemini: 'Gemini',
-  kling: 'Kling',
+  openai_compatible: '通用 OpenAI 兼容',
 };
 
 export function groupModelOptions(

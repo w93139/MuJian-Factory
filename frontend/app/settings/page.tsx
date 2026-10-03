@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle, Loader2, Save, Settings, XCircle } from 'lucide-react';
+import { CheckCircle, Loader2, Plus, Save, Settings, Trash2, XCircle } from 'lucide-react';
 import BrandHeader from '@/components/BrandHeader';
 import { fetchModelGroupsByType, fetchVideoModelGroupsByAbility } from '@/lib/modelRegistry';
+import { fetchAppConfig, saveAppConfig } from '@/lib/workflowApi';
 import {
   VIDEO_RATIOS,
   VIDEO_RESOLUTIONS,
@@ -22,6 +23,8 @@ type Field = {
 };
 
 type ModelSelectKey = 'llm' | 'vlm' | 'image_it2i' | 'image_t2i' | 'video_first_frame' | 'video_start_end' | 'video_reference';
+type CompatibleModel = { id: string; name: string; type: string[] };
+const COMPATIBLE_MODELS_PATH = 'api_providers.openai_compatible.models';
 
 const EMPTY_MODEL_SELECTS: Record<ModelSelectKey, ProviderGroup[]> = {
   llm: [],
@@ -58,61 +61,33 @@ const GROUPS: Array<{ title: string; description: string; fields: Field[] }> = [
     fields: [
       { path: 'api_providers.common.print_model_input', label: 'print_model_input 打印模型输入', type: 'boolean' },
       { path: 'api_providers.common.proxy', label: 'proxy 代理地址' },
+      { path: 'api_providers.common.request_timeout', label: 'request_timeout 请求超时（秒）', type: 'number' },
     ],
   },
   {
-    title: 'OpenAI',
-    description: 'OpenAI / 兼容 OpenAI 接口配置。',
-    fields: [
-      { path: 'api_providers.openai.api_key', label: 'api_key API 密钥', type: 'password' },
-      { path: 'api_providers.openai.base_url', label: 'base_url 接口地址' },
-      { path: 'api_providers.openai.enable_proxy', label: 'enable_proxy 启用代理', type: 'boolean' },
-    ],
-  },
-  {
-    title: 'Gemini',
-    description: 'Gemini 及兼容接口配置。',
-    fields: [
-      { path: 'api_providers.gemini.api_key', label: 'api_key API 密钥', type: 'password' },
-      { path: 'api_providers.gemini.base_url', label: 'base_url 接口地址' },
-      { path: 'api_providers.gemini.enable_proxy', label: 'enable_proxy 启用代理', type: 'boolean' },
-    ],
-  },
-  {
-    title: 'DeepSeek',
-    description: 'DeepSeek 接口配置。',
-    fields: [
-      { path: 'api_providers.deepseek.api_key', label: 'api_key API 密钥', type: 'password' },
-      { path: 'api_providers.deepseek.base_url', label: 'base_url 接口地址' },
-      { path: 'api_providers.deepseek.enable_proxy', label: 'enable_proxy 启用代理', type: 'boolean' },
-    ],
-  },
-  {
-    title: 'DashScope',
-    description: '通义千问、通义万相等 DashScope 服务配置。',
+    title: '百炼 DashScope',
+    description: '通义千问、通义万相等百炼服务配置。',
     fields: [
       { path: 'api_providers.dashscope.api_key', label: 'api_key API 密钥', type: 'password' },
       { path: 'api_providers.dashscope.base_url', label: 'base_url 接口地址' },
-      { path: 'api_providers.dashscope.enable_proxy', label: 'enable_proxy 启用代理', type: 'boolean' },
+      { path: 'api_providers.dashscope.compatible_base_url', label: 'compatible_base_url 兼容接口地址' },
     ],
   },
   {
-    title: 'ARK',
+    title: '火山方舟 ARK',
     description: 'Seedream / Seedance 使用的火山方舟配置。',
     fields: [
       { path: 'api_providers.ark.api_key', label: 'api_key API 密钥', type: 'password' },
       { path: 'api_providers.ark.base_url', label: 'base_url 接口地址' },
-      { path: 'api_providers.ark.enable_proxy', label: 'enable_proxy 启用代理', type: 'boolean' },
     ],
   },
   {
-    title: 'Kling',
-    description: '可灵视频生成接口配置。',
+    title: '通用 OpenAI 兼容',
+    description: '配置兼容接口及其文本、视觉模型。',
     fields: [
-      { path: 'api_providers.kling.base_url', label: 'base_url 接口地址' },
-      { path: 'api_providers.kling.access_key', label: 'access_key 访问密钥', type: 'password' },
-      { path: 'api_providers.kling.secret_key', label: 'secret_key 私密密钥', type: 'password' },
-      { path: 'api_providers.kling.enable_proxy', label: 'enable_proxy 启用代理', type: 'boolean' },
+      { path: 'api_providers.openai_compatible.display_name', label: 'display_name 平台显示名' },
+      { path: 'api_providers.openai_compatible.api_key', label: 'api_key API 密钥', type: 'password' },
+      { path: 'api_providers.openai_compatible.base_url', label: 'base_url 接口地址' },
     ],
   },
   {
@@ -190,9 +165,7 @@ export default function SettingsPage() {
       setLoading(true);
       setError('');
       try {
-        const resp = await fetch('/api/config');
-        if (!resp.ok) throw new Error('读取配置失败');
-        const data = await resp.json();
+        const data = await fetchAppConfig();
         setConfig(data.config || {});
         setPath(data.path || '');
         setSecretDrafts({});
@@ -249,6 +222,21 @@ export default function SettingsPage() {
     };
   });
 
+  const rawCompatibleModels: unknown = getValue(config, COMPATIBLE_MODELS_PATH);
+  const compatibleModels: CompatibleModel[] = Array.isArray(rawCompatibleModels)
+    ? rawCompatibleModels as CompatibleModel[]
+    : [];
+
+  const updateCompatibleModels = (models: CompatibleModel[]) => {
+    setConfig(current => setValue(current, COMPATIBLE_MODELS_PATH, models));
+  };
+
+  const updateCompatibleModel = (index: number, changes: Partial<CompatibleModel>) => {
+    updateCompatibleModels(compatibleModels.map((model, itemIndex) =>
+      itemIndex === index ? { ...model, ...changes } : model
+    ));
+  };
+
   const updateField = (field: Field, raw: string | boolean) => {
     const value = field.type === 'number' ? Number(raw) || 0 : raw;
     setConfig(current => setValue(current, field.path, value));
@@ -259,13 +247,11 @@ export default function SettingsPage() {
     setMessage('');
     setError('');
     try {
-      const resp = await fetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: config }),
-      });
-      if (!resp.ok) throw new Error('保存配置失败');
-      const data = await resp.json();
+      const modelIds = compatibleModels.map(model => model.id.trim());
+      if (compatibleModels.some(model => !model.id.trim() || !model.type?.length) || new Set(modelIds).size !== modelIds.length) {
+        throw new Error('兼容模型需填写唯一 ID，并至少选择一种类型');
+      }
+      const data = await saveAppConfig(config);
       setConfig(data.config || {});
       setPath(data.path || '');
       setSecretDrafts({});
@@ -367,6 +353,57 @@ export default function SettingsPage() {
                 </div>
               </section>
             ))}
+
+            <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-gray-800">兼容接口模型列表</h2>
+                  <p className="mt-1 text-xs text-gray-500">添加模型 ID 后，可在文本和视觉模型选择器中使用。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updateCompatibleModels([...compatibleModels, { id: '', name: '', type: ['llm'] }])}
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />添加模型
+                </button>
+              </div>
+              <div className="space-y-3">
+                {compatibleModels.map((model, index) => (
+                  <div key={index} className="grid gap-3 rounded-xl border border-gray-100 p-3 md:grid-cols-[1fr_1fr_auto_auto] md:items-end">
+                    <label className="flex flex-col gap-1 text-xs text-gray-500">
+                      模型 ID
+                      <input value={model.id || ''} onChange={event => updateCompatibleModel(index, { id: event.target.value })}
+                        className="h-9 rounded-lg border border-gray-200 px-3 text-sm text-gray-700" />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-gray-500">
+                      显示名称
+                      <input value={model.name || ''} onChange={event => updateCompatibleModel(index, { name: event.target.value })}
+                        className="h-9 rounded-lg border border-gray-200 px-3 text-sm text-gray-700" />
+                    </label>
+                    <div className="flex h-9 items-center gap-3 text-xs text-gray-600">
+                      {(['llm', 'vlm'] as const).map(kind => (
+                        <label key={kind} className="flex items-center gap-1">
+                          <input type="checkbox" checked={model.type?.includes(kind) || false}
+                            onChange={event => updateCompatibleModel(index, {
+                              type: event.target.checked
+                                ? [...(model.type || []), kind]
+                                : (model.type || []).filter(item => item !== kind),
+                            })} />
+                          {kind === 'llm' ? '文本' : '视觉'}
+                        </label>
+                      ))}
+                    </div>
+                    <button type="button" aria-label={`删除模型 ${model.id || index + 1}`}
+                      onClick={() => updateCompatibleModels(compatibleModels.filter((_, itemIndex) => itemIndex !== index))}
+                      className="flex h-9 items-center justify-center rounded-lg border border-gray-200 px-3 text-gray-500 hover:text-red-600">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                {compatibleModels.length === 0 && <p className="text-xs text-gray-400">尚未添加兼容模型。</p>}
+              </div>
+            </section>
 
             <div className="sticky bottom-4 flex items-center gap-3 rounded-2xl border border-gray-200 bg-white/95 p-3 shadow-lg backdrop-blur">
               {message && (

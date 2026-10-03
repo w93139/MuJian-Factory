@@ -96,6 +96,27 @@ export interface ApiModelOption {
   capabilities?: Record<string, any>;
 }
 
+export type AppConfigValues = Record<string, unknown> & {
+  models?: Record<string, string>;
+  generation?: Record<string, string>;
+};
+
+export async function fetchAppConfig(): Promise<{ config: AppConfigValues; path?: string }> {
+  const response = await fetch('/api/config');
+  if (!response.ok) throw new Error('读取配置失败');
+  return response.json();
+}
+
+export async function saveAppConfig(values: Record<string, unknown>): Promise<{ config: AppConfigValues; path?: string }> {
+  const response = await fetch('/api/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ values }),
+  });
+  if (!response.ok) throw new Error('保存配置失败');
+  return response.json();
+}
+
 export interface StandardTemplateOption {
   id: string;
   name: string;

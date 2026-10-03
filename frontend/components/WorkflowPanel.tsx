@@ -16,6 +16,7 @@ import {
   updateModels,
   deleteSession,
   saveSelections,
+  fetchAppConfig,
 } from '@/lib/workflowApi';
 import TopBar, { STAGES, type ModelConfig } from './TopBar';
 import HomePage, { type ProjectParams } from './HomePage';
@@ -1171,22 +1172,32 @@ export default function WorkflowPanel() {
       const meta = ((status as any).meta || {}) as any;
       const s = Object.keys(meta).length > 0 ? meta : (status as any);
       if (s.idea || s.user_textbox_input) {
+        let defaultModels: Record<string, string> = {};
+        try {
+          defaultModels = (await fetchAppConfig()).config?.models || {};
+        } catch { /* 会话内已有模型时仍可恢复 */ }
         // Legacy session compatibility: old sessions only stored one video_model, so hydrate it as the first-frame model.
-        const restoredFirstFrameVideoModel = s.video_first_frame_model || s.video_model || '';
+        const restoredFirstFrameVideoModel = s.video_first_frame_model || s.video_model || defaultModels.video_first_frame || '';
+        const restoredStartEndModel = s.video_start_end_model || defaultModels.video_start_end || '';
+        const restoredReferenceModel = s.video_reference_model || defaultModels.video_reference || '';
+        const restoredVideoMode = s.video_generation_mode || 'first_frame';
+        const restoredActiveModel = restoredVideoMode === 'start_end_frame'
+          ? restoredStartEndModel
+          : restoredVideoMode === 'reference' ? restoredReferenceModel : restoredFirstFrameVideoModel;
         setProjectParams({
           idea: s.idea || s.user_textbox_input || '',
           style: s.style || '',
           video_ratio: s.video_ratio || '16:9',
           video_resolution: s.video_resolution || '720P',
-          llm_model: s.llm_model || '',
-          vlm_model: s.vlm_model || '',
-          image_t2i_model: s.image_t2i_model || '',
-          image_it2i_model: s.image_it2i_model || '',
-          video_generation_mode: s.video_generation_mode || 'first_frame',
+          llm_model: s.llm_model || defaultModels.llm || '',
+          vlm_model: s.vlm_model || defaultModels.vlm || '',
+          image_t2i_model: s.image_t2i_model || defaultModels.image_t2i || '',
+          image_it2i_model: s.image_it2i_model || defaultModels.image_it2i || '',
+          video_generation_mode: restoredVideoMode,
           video_first_frame_model: restoredFirstFrameVideoModel,
-          video_start_end_model: s.video_start_end_model || 'wan2.7-i2v',
-          video_reference_model: s.video_reference_model || 'wan2.7-r2v',
-          video_model: s.video_model || '',
+          video_start_end_model: restoredStartEndModel,
+          video_reference_model: restoredReferenceModel,
+          video_model: s.video_model || restoredActiveModel,
           expand_idea: s.expand_idea || false,
           enable_concurrency: s.enable_concurrency || false,
           web_search: s.web_search || false,
@@ -1252,8 +1263,8 @@ export default function WorkflowPanel() {
         // Legacy session compatibility: projectParams may come from an old session with only video_model.
         video_generation_mode: projectParams.video_generation_mode || 'first_frame',
         video_first_frame_model: projectParams.video_first_frame_model || projectParams.video_model,
-        video_start_end_model: projectParams.video_start_end_model || 'wan2.7-i2v',
-        video_reference_model: projectParams.video_reference_model || 'wan2.7-r2v',
+        video_start_end_model: projectParams.video_start_end_model,
+        video_reference_model: projectParams.video_reference_model,
         video_model: projectParams.video_model,
         video_ratio: projectParams.video_ratio,
         video_resolution: projectParams.video_resolution || '720P',
