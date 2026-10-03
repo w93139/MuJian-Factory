@@ -269,6 +269,60 @@ export async function uploadMedia(file: File): Promise<{ filename: string; file_
   return resp.json();
 }
 
+export async function uploadProjectFile(file: File): Promise<{ file_path?: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch('/api/upload_file', { method: 'POST', body: formData });
+  if (!response.ok) throw new Error('文件上传失败');
+  return response.json();
+}
+
+export async function patchStageArtifact(
+  sessionId: string,
+  stage: 'reference_generation' | 'video_generation',
+  values: Record<string, unknown>,
+): Promise<boolean> {
+  const response = await fetch(`/api/project/${sessionId}/artifact/${stage}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(values),
+  });
+  return response.ok;
+}
+
+export type SandboxTool = 'llm' | 'vlm' | 't2i' | 'i2i' | 'video';
+
+async function readSandboxJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  if (!text.trim()) {
+    if (!response.ok) throw new Error(`请求失败：${response.status}`);
+    return {} as T;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    const preview = text.replace(/\s+/g, ' ').slice(0, 160);
+    throw new Error(response.ok ? `接口返回了非 JSON 内容：${preview}` : `请求失败：${response.status} ${preview}`);
+  }
+}
+
+export async function fetchSandboxHistoryResult<T>(): Promise<T> {
+  return readSandboxJsonResponse<T>(await fetch('/api/sandbox/history'));
+}
+
+export async function deleteSandboxHistoryRecord<T>(id: string): Promise<T> {
+  return readSandboxJsonResponse<T>(await fetch(`/api/sandbox/history/${id}`, { method: 'DELETE' }));
+}
+
+export async function runSandboxTool<T>(tool: SandboxTool, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(`/api/sandbox/${tool}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return readSandboxJsonResponse<T>(response);
+}
+
 export async function uploadArtifactImage(
   sessionId: string,
   stage: string,

@@ -5,7 +5,7 @@ const eslintConfig = [
   ...nextCoreVitals,
   ...nextTypescript,
   {
-    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
+    ignores: [".next/**", ".next-e2e/**", "out/**", "build/**", "next-env.d.ts"],
   },
   {
     // Existing pages are migrated incrementally; keep these diagnostics visible.

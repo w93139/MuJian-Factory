@@ -24,8 +24,7 @@
 **/code/result/
 dev/
 
-# Private execution notes; AGENTS.md is added after its Phase 8 rewrite
-AGENTS.md
+# Private execution notes
 docs/codex/
 
 # Source copy; frontend/public and frontend/app contain the shipped logo

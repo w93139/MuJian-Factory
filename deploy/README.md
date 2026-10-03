@@ -31,6 +31,24 @@ curl -f http://127.0.0.1/api/health
 
 健康检查成功后，用浏览器访问 `http://<公网IP>/login`。管理员登录，在设置页生成面试官邀请码，并将完成验收的会话标记为「示例」。面试官凭邀请码只能浏览，不能发起生成。
 
+### 恢复本机已验收的演示作品
+
+这次验收的 30 秒成片和三条短 Demo **只保存在本机**，不会推送到 GitHub。已单独打包为本机的 `backend/.local-runtime/mujian-showcase-data.tar.gz`；其中只有选定的示例会话及三条成功任务，不含邀请码、API Key、用量记录或失败任务。服务器准备好后，从本机上传该压缩包，例如：
+
+```bash
+scp backend/.local-runtime/mujian-showcase-data.tar.gz <user>@<公网IP>:/tmp/
+```
+
+在服务器仓库根目录解压到挂载目录，随后重启后端：
+
+```bash
+tar -tzf /tmp/mujian-showcase-data.tar.gz | head
+tar -xzf /tmp/mujian-showcase-data.tar.gz -C backend
+docker compose up -d --force-recreate backend
+```
+
+压缩包内路径都位于 `code/` 下；已导入的流水线任务路径会在读取时自动映射到当前服务器。恢复后用面试官邀请码检查示例作品及三条历史视频。请把该压缩包留在私有存储中，不上传到公开仓库。
+
 `MUJIAN_DAILY_BUDGET_CNY` 是按模型注册表价格计算的**每日估算上限**，默认模板为 ¥50；它不是平台实际账单。`MUJIAN_MAX_CONCURRENT_JOBS` 限制同时运行的阶段与快捷流水线任务。测试前可按预算调整这两个值。
 
 ## 3. 域名与 HTTPS

@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Film, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, AlertTriangle, Play, Edit2, Save, X } from 'lucide-react';
 import type { StageViewProps } from './types';
 import { assetUrl } from './utils';
+import { patchStageArtifact } from '@/lib/workflowApi';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
 import ErrorDetails from '@/components/ErrorDetails';
@@ -430,14 +431,10 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
 
     setSavingIds(prev => new Set(prev).add(clipId));
     try {
-      const response = await fetch(`/api/project/${sessionId}/artifact/video_generation`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          [clipId]: { description: newPrompt }
-        })
+      const saved = await patchStageArtifact(sessionId, 'video_generation', {
+        [clipId]: { description: newPrompt }
       });
-      if (response.ok) {
+      if (saved) {
         // 更新前端缓存的 clips.description
         if (onUpdateArtifact && state.artifact?.clips) {
           const updatedClips = state.artifact.clips.map((c: ClipItem) =>

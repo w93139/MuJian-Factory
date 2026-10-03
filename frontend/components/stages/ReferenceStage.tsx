@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus, Edit2, Save, X, Upload } from 'lucide-react';
 import type { StageViewProps } from './types';
 import { assetUrl, assetVersionLabel } from './utils';
-import { uploadArtifactImage } from '@/lib/workflowApi';
+import { patchStageArtifact, uploadArtifactImage } from '@/lib/workflowApi';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
 import ImageLightbox from './ImageLightbox';
@@ -439,18 +439,13 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
 
     setSavingIds(prev => new Set(prev).add(sceneId));
     try {
-      // 调用后端 API 保存提示词
-      const response = await fetch(`/api/project/${sessionId}/artifact/reference_generation`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          segments: scenes.map(s => ({
-            segment_id: s.id,
-            visual_prompt: s.id === sceneId ? newPrompt : s.description
-          }))
-        })
+      const saved = await patchStageArtifact(sessionId, 'reference_generation', {
+        segments: scenes.map(s => ({
+          segment_id: s.id,
+          visual_prompt: s.id === sceneId ? newPrompt : s.description
+        }))
       });
-      if (response.ok) {
+      if (saved) {
         // 保存成功后关闭编辑模式
         setEditingIds(prev => {
           const next = new Set(prev);

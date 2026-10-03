@@ -14,7 +14,7 @@ import {
 } from '@/config/models';
 import { STAGES } from './TopBar';
 import { fetchModelGroupsByType, fetchVideoModelGroupsByAbility } from '@/lib/modelRegistry';
-import { fetchAppConfig, fetchQuickDemoVideoModel } from '@/lib/workflowApi';
+import { fetchAppConfig, fetchQuickDemoVideoModel, uploadProjectFile } from '@/lib/workflowApi';
 
 export interface ProjectParams {
   idea: string;
@@ -273,20 +273,8 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
     }
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-      const response = await fetch('/api/upload_file', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('文件上传失败');
-      }
-
-      const data = await response.json();
+      const data = await uploadProjectFile(file);
       if (data.file_path) {
         // 记录已上传的文件信息，不修改输入框
         setUploadedFile({

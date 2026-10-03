@@ -5,7 +5,7 @@ import { Sparkles, Image, Video, MessageSquare, Zap, Loader2, Copy, Check, Trash
 import { useSearchParams } from 'next/navigation';
 import type { ModelOption, ProviderGroup } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
-import { fetchSandboxTasks, uploadMedia } from '@/lib/workflowApi';
+import { deleteSandboxHistoryRecord, fetchSandboxHistoryResult, fetchSandboxTasks, runSandboxTool, uploadMedia, type SandboxTool } from '@/lib/workflowApi';
 import { fetchModelGroupsByType } from '@/lib/modelRegistry';
 
 // 辅助函数：将相对路径转换为完整 URL
@@ -22,22 +22,8 @@ const toMediaUrl = (path: string) => {
   return path;
 };
 
-async function readJsonResponse(resp: Response) {
-  const text = await resp.text();
-  if (!text.trim()) {
-    if (!resp.ok) throw new Error(`请求失败：${resp.status}`);
-    return {};
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    const preview = text.replace(/\s+/g, ' ').slice(0, 160);
-    throw new Error(resp.ok ? `接口返回了非 JSON 内容：${preview}` : `请求失败：${resp.status} ${preview}`);
-  }
-}
-
 // 工具类型
-type ToolType = 'llm' | 'vlm' | 't2i' | 'i2i' | 'video';
+type ToolType = SandboxTool;
 
 const EMPTY_MODEL_GROUPS: Record<ToolType, ProviderGroup[]> = {
   llm: [],
@@ -339,8 +325,7 @@ export default function SandboxPage() {
   // 获取历史记录
   const fetchHistory = async () => {
     try {
-      const resp = await fetch('/api/sandbox/history');
-      const data = await readJsonResponse(resp);
+      const data = await fetchSandboxHistoryResult<{ success?: boolean; records: HistoryRecord[] }>();
       if (data.success) {
         setHistory(data.records);
       }
@@ -438,8 +423,7 @@ export default function SandboxPage() {
   const deleteRecord = async (id: string) => {
     setDeleting(id);
     try {
-      const resp = await fetch(`/api/sandbox/history/${id}`, { method: 'DELETE' });
-      const data = await readJsonResponse(resp);
+      const data = await deleteSandboxHistoryRecord<{ success?: boolean }>(id);
       if (data.success) {
         setHistory(history.filter(r => r.id !== id));
         if (selectedRecord?.id === id) {
@@ -492,7 +476,6 @@ export default function SandboxPage() {
     setError(null);
 
     try {
-      let apiUrl = '';
       const body: Record<string, unknown> = {
         model: selectedModel,
         prompt: prompt,
@@ -500,36 +483,25 @@ export default function SandboxPage() {
 
       switch (activeTool) {
         case 'llm':
-          apiUrl = '/api/sandbox/llm';
           // web_search 只对 LLM 有效
           if (webSearch) {
             body.web_search = true;
           }
           break;
         case 'vlm':
-          apiUrl = '/api/sandbox/vlm';
           body.images = [imageUrl];
           break;
         case 't2i':
-          apiUrl = '/api/sandbox/t2i';
           break;
         case 'i2i':
-          apiUrl = '/api/sandbox/i2i';
           body.image = imageUrl;
           break;
         case 'video':
-          apiUrl = '/api/sandbox/video';
           body.image = imageUrl;
           break;
       }
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-
-      const data = await readJsonResponse(response);
+      const data = await runSandboxTool<{ success?: boolean; result?: string | string[]; video_path?: string; error?: string }>(activeTool, body);
 
       if (data.success) {
         if (activeTool === 't2i' || activeTool === 'i2i' || activeTool === 'video') {
@@ -539,9 +511,9 @@ export default function SandboxPage() {
           setCurrentOutput(output);
           setResult(null);
         } else {
-          const output = { response: data.result };
+          const output = { response: data.result as string };
           setCurrentOutput(output);
-          setResult(data.result);
+          setResult(data.result as string);
         }
         fetchHistory();
       } else {

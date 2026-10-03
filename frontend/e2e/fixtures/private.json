@@ -1,0 +1,10 @@
+{
+  "session_id": "e2e-private",
+  "current_stage": "script_generation",
+  "status": {"script_generation": "completed"},
+  "artifacts": {"script_generation": {"title": "私有草稿"}},
+  "meta": {"idea": "私有草稿"},
+  "stage_progress": {},
+  "updated_at": 1759999999,
+  "showcase": false
+}

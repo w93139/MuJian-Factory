@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from config import settings
@@ -17,6 +18,19 @@ _task_store_lock = threading.RLock()
 
 TASK_DATA_DIR = os.path.join(settings.CODE_DIR, "data", "tasks")
 TASK_RESULT_DIR = os.path.join(settings.RESULT_DIR, "task")
+
+
+def _rebase_artifact_paths(value: Any) -> Any:
+    """Make imported task metadata point at this backend's code volume."""
+    if isinstance(value, dict):
+        return {key: _rebase_artifact_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_rebase_artifact_paths(item) for item in value]
+    if isinstance(value, str) and value.startswith("/"):
+        for marker in ("/code/result/", "/code/data/"):
+            if marker in value:
+                return str(Path(settings.CODE_DIR) / marker.removeprefix("/code/").rstrip("/") / value.split(marker, 1)[1])
+    return value
 
 
 def ensure_task_dirs() -> None:
@@ -56,7 +70,7 @@ def load_task(task_id: str) -> Optional[Dict[str, Any]]:
         if not os.path.exists(path):
             return None
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return _rebase_artifact_paths(json.load(f))
 
 
 def delete_task(task_id: str) -> bool:
@@ -84,7 +98,7 @@ def list_tasks(limit: int = 100) -> list[Dict[str, Any]]:
                 continue
             try:
                 with open(os.path.join(TASK_DATA_DIR, filename), "r", encoding="utf-8") as f:
-                    records.append(json.load(f))
+                    records.append(_rebase_artifact_paths(json.load(f)))
             except Exception:
                 continue
         records.sort(key=lambda item: item.get("created_at", ""), reverse=True)

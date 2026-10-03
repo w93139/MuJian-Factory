@@ -1,0 +1,24 @@
+{
+  "session_id": "e2e-showcase",
+  "current_stage": "completed",
+  "status": {
+    "script_generation": "completed",
+    "character_design": "completed",
+    "storyboard": "completed",
+    "reference_generation": "completed",
+    "video_generation": "completed",
+    "post_production": "completed"
+  },
+  "artifacts": {
+    "script_generation": {"title": "演示短片：一封信", "script": "剧本占位：主角打开一封旧信。"},
+    "character_design": {"characters": [{"name": "阿澄", "description": "角色占位：年轻的旅行者。"}]},
+    "storyboard": {"shots": [{"description": "分镜占位：清晨的窗边。"}]},
+    "reference_generation": {"image_path": "result/e2e-showcase/image.png", "description": "参考图占位"},
+    "video_generation": {"video_path": "result/e2e-showcase/video.mp4", "description": "视频片段占位"},
+    "post_production": {"final_video_path": "result/e2e-showcase/video.mp4", "description": "成片占位"}
+  },
+  "meta": {"idea": "一封信的旅行", "style": "cinematic", "video_resolution": "720P"},
+  "stage_progress": {},
+  "updated_at": 1760000000,
+  "showcase": true
+}
