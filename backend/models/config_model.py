@@ -12,52 +12,15 @@ backend_dir = os.path.dirname(models_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+import logging
 from copy import deepcopy
 from typing import Any, Optional
 
-MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek Chat',
-                              'provider': 'deepseek',
-                              'type': ['llm'],
-                              'concurrency': 10,
-                              'price_per_1k_input_token': 0.002,
-                              'price_per_1k_output_token': 0.008},
-            'deepseek-reasoner': {'name': 'DeepSeek Reasoner',
-                                  'provider': 'deepseek',
-                                  'type': ['llm'],
-                                  'concurrency': 10,
-                                  'price_per_1k_input_token': 0.004,
-                                  'price_per_1k_output_token': 0.016},
-            'deepseek-v4-flash': {'name': 'DeepSeek V4 Flash',
-                                  'provider': 'deepseek',
-                                  'type': ['llm'],
-                                  'concurrency': 10,
-                                  'price_per_1k_input_token': 0.001,
-                                  'price_per_1k_output_token': 0.004},
-            'deepseek-v4-pro': {'name': 'DeepSeek V4 Pro',
-                                'provider': 'deepseek',
-                                'type': ['llm'],
-                                'concurrency': 10,
-                                'price_per_1k_input_token': 0.002,
-                                'price_per_1k_output_token': 0.008},
-            'gpt-4o': {'name': 'GPT-4o',
-                       'provider': 'openai',
-                       'type': ['llm'],
-                       'concurrency': 10,
-                       'price_per_1k_input_token': 0.018,
-                       'price_per_1k_output_token': 0.072},
-            'gpt-5': {'name': 'GPT-5',
-                      'provider': 'openai',
-                      'type': ['llm'],
-                      'concurrency': 10,
-                      'price_per_1k_input_token': 0.02,
-                      'price_per_1k_output_token': 0.1},
-            'gpt-5.4': {'name': 'GPT-5.4',
-                        'provider': 'openai',
-                        'type': ['llm', 'vlm'],
-                        'concurrency': 10,
-                        'price_per_1k_input_token': 0.03,
-                        'price_per_1k_output_token': 0.12},
-            'qwen3.7-max': {'name': 'Qwen 3.7 Max',
+from config import Config
+
+logger = logging.getLogger(__name__)
+
+MODEL_CONFIG: dict[str, Any] = {'models': {'qwen3.7-max': {'name': 'Qwen 3.7 Max',
                             'provider': 'dashscope',
                             'family': 'qwen',
                             'type': ['llm'],
@@ -67,14 +30,14 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
             'qwen3.7-plus': {'name': 'Qwen 3.7 Plus',
                              'provider': 'dashscope',
                              'family': 'qwen',
-                             'type': ['vlm'],
+                             'type': ['llm', 'vlm'],
                              'concurrency': 10,
                              'price_per_1k_input_token': 0.0008,
                              'price_per_1k_output_token': 0.002},
             'qwen3.5-plus': {'name': 'Qwen 3.5 Plus',
                              'provider': 'dashscope',
                              'family': 'qwen',
-                             'type': ['vlm'],
+                             'type': ['llm', 'vlm'],
                              'concurrency': 10,
                              'price_per_1k_input_token': 0.0008,
                              'price_per_1k_output_token': 0.002},
@@ -102,14 +65,14 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
             'qwen3.6-plus': {'name': 'Qwen 3.6 Plus',
                              'provider': 'dashscope',
                              'family': 'qwen',
-                             'type': ['vlm'],
+                             'type': ['llm', 'vlm'],
                              'concurrency': 10,
                              'price_per_1k_input_token': 0.0008,
                              'price_per_1k_output_token': 0.002},
             'qwen3.6-flash': {'name': 'Qwen 3.6 Flash',
                               'provider': 'dashscope',
                               'family': 'qwen',
-                              'type': ['vlm'],
+                              'type': ['llm', 'vlm'],
                               'concurrency': 10,
                               'price_per_1k_input_token': 0.0001,
                               'price_per_1k_output_token': 0.0001},
@@ -120,24 +83,6 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                           'concurrency': 10,
                           'price_per_1k_input_token': 0.001,
                           'price_per_1k_output_token': 0.003},
-            'gemini-2.5-flash': {'name': 'Gemini 2.5 Flash',
-                                 'provider': 'gemini',
-                                 'type': ['llm'],
-                                 'concurrency': 10,
-                                 'price_per_1k_input_token': 0.002,
-                                 'price_per_1k_output_token': 0.01},
-            'gemini-2.0-flash': {'name': 'Gemini 2.0 Flash',
-                                 'provider': 'gemini',
-                                 'type': ['llm', 'vlm'],
-                                 'concurrency': 10,
-                                 'price_per_1k_input_token': 0.002,
-                                 'price_per_1k_output_token': 0.01},
-            'gemini-2.5-flash-image': {'name': 'Gemini 2.5 Flash Image',
-                                       'provider': 'gemini',
-                                       'type': ['vlm'],
-                                       'concurrency': 10,
-                                       'price_per_1k_input_token': 0.002,
-                                       'price_per_1k_output_token': 0.01},
             'wan2.7-image': {'name': 'Wan 2.7 Image',
                              'provider': 'dashscope',
                              'family': 'wan',
@@ -145,14 +90,16 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                              'concurrency': 5,
                              'price_per_image': 0.2,
                              'capabilities': {'ability_type': 'image_generation',
-                                              'ability_types': ['text_to_image', 'image_to_image', 'reference_image'],
+                                              'ability_types': ['text_to_image',
+                                                                'image_to_image',
+                                                                'reference_image'],
                                               'adapter_ability_types': ['text_to_image',
                                                                         'image_to_image',
                                                                         'reference_image'],
                                               'input_modalities': ['text', 'image'],
                                               'adapter_input_modalities': ['text', 'image'],
                                               'api_contract_verified': True,
-                                              'resolutions': ['720P', '1080P', '2K', '4K'],
+                                              'resolutions': ['1K', '2K'],
                                               'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4']}},
             'wan2.7-image-pro': {'name': 'Wan 2.7 Image Pro',
                                  'provider': 'dashscope',
@@ -171,8 +118,12 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                   'input_modalities': ['text', 'image'],
                                                   'adapter_input_modalities': ['text', 'image'],
                                                   'api_contract_verified': True,
-                                                  'resolutions': ['720P', '1080P', '2K', '4K'],
-                                                  'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4']}},
+                                                  'resolutions': ['1K', '2K', '4K'],
+                                                  'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4'],
+                                                  'resolution_constraints': {'t2i': ['1K',
+                                                                                     '2K',
+                                                                                     '4K'],
+                                                                             'i2i': ['1K', '2K']}}},
             'wan2.6-t2i': {'name': 'Wan 2.6 T2I',
                            'provider': 'dashscope',
                            'family': 'wan',
@@ -185,8 +136,9 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                             'input_modalities': ['text'],
                                             'adapter_input_modalities': ['text'],
                                             'api_contract_verified': True,
-                                            'resolutions': ['720P', '1080P', '2K', '4K'],
-                                            'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4']}},
+                                            'resolutions': [],
+                                            'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4'],
+                                            'size_format': 'custom_width_height'}},
             'doubao-seedream-5-0-260128': {'name': 'Seedream 5.0',
                                            'provider': 'ark',
                                            'family': 'seedream',
@@ -202,10 +154,15 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                                       'image_to_image',
                                                                                       'reference_image'],
                                                             'input_modalities': ['text', 'image'],
-                                                            'adapter_input_modalities': ['text', 'image'],
+                                                            'adapter_input_modalities': ['text',
+                                                                                         'image'],
                                                             'api_contract_verified': True,
-                                                            'resolutions': ['720P', '1080P', '2K', '4K'],
-                                                            'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4']}},
+                                                            'resolutions': ['2K', '3K', '4K'],
+                                                            'ratios': ['16:9',
+                                                                       '9:16',
+                                                                       '1:1',
+                                                                       '4:3',
+                                                                       '3:4']}},
             'doubao-seedream-4-5-251128': {'name': 'Seedream 4.5',
                                            'provider': 'ark',
                                            'family': 'seedream',
@@ -220,10 +177,15 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                                       'image_to_image',
                                                                                       'reference_image'],
                                                             'input_modalities': ['text', 'image'],
-                                                            'adapter_input_modalities': ['text', 'image'],
+                                                            'adapter_input_modalities': ['text',
+                                                                                         'image'],
                                                             'api_contract_verified': True,
-                                                            'resolutions': ['720P', '1080P', '2K', '4K'],
-                                                            'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4']}},
+                                                            'resolutions': ['2K', '4K'],
+                                                            'ratios': ['16:9',
+                                                                       '9:16',
+                                                                       '1:1',
+                                                                       '4:3',
+                                                                       '3:4']}},
             'doubao-seedream-4-0-250828': {'name': 'Seedream 4.0',
                                            'provider': 'ark',
                                            'family': 'seedream',
@@ -238,34 +200,15 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                                       'image_to_image',
                                                                                       'reference_image'],
                                                             'input_modalities': ['text', 'image'],
-                                                            'adapter_input_modalities': ['text', 'image'],
+                                                            'adapter_input_modalities': ['text',
+                                                                                         'image'],
                                                             'api_contract_verified': True,
-                                                            'resolutions': ['720P', '1080P', '2K', '4K'],
-                                                            'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4']}},
-            'sora_image': {'name': 'Sora Image',
-                           'provider': 'openai',
-                           'type': ['t2i'],
-                           'concurrency': 3,
-                           'price_per_image': 1.45,
-                           'capabilities': {'ability_type': 'image_generation',
-                                            'ability_types': ['text_to_image'],
-                                            'adapter_ability_types': ['text_to_image'],
-                                            'input_modalities': ['text'],
-                                            'adapter_input_modalities': ['text'],
-                                            'api_contract_verified': True}},
-            'gpt-image-2': {'name': 'GPT Image 2',
-                            'provider': 'openai',
-                            'type': ['t2i', 'i2i'],
-                            'concurrency': 3,
-                            'price_per_image': 1.09,
-                            'capabilities': {'ability_type': 'image_generation',
-                                             'ability_types': ['text_to_image', 'image_to_image', 'reference_image'],
-                                             'adapter_ability_types': ['text_to_image',
-                                                                       'image_to_image',
-                                                                       'reference_image'],
-                                             'input_modalities': ['text', 'image'],
-                                             'adapter_input_modalities': ['text', 'image'],
-                                             'api_contract_verified': True}},
+                                                            'resolutions': ['1K', '2K', '4K'],
+                                                            'ratios': ['16:9',
+                                                                       '9:16',
+                                                                       '1:1',
+                                                                       '4:3',
+                                                                       '3:4']}},
             'wan2.6-i2v-flash': {'name': 'Wan 2.6 I2V Flash',
                                  'provider': 'dashscope',
                                  'family': 'wan',
@@ -280,7 +223,10 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                   'adapter_ability_types': ['first_frame_i2v'],
                                                   'input_modalities': ['text', 'image', 'audio'],
                                                   'adapter_input_modalities': ['text', 'image'],
-                                                  'duration': {'min': 2, 'max': 15, 'integer': True, 'verified': True},
+                                                  'duration': {'min': 2,
+                                                               'max': 15,
+                                                               'integer': True,
+                                                               'verified': True},
                                                   'resolutions': ['720P', '1080P'],
                                                   'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4'],
                                                   'api_contract_verified': True}},
@@ -301,7 +247,10 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                       'audio_driven_i2v'],
                                             'input_modalities': ['text', 'image', 'audio', 'video'],
                                             'adapter_input_modalities': ['text', 'image'],
-                                            'duration': {'min': 2, 'max': 15, 'integer': True, 'verified': True},
+                                            'duration': {'min': 2,
+                                                         'max': 15,
+                                                         'integer': True,
+                                                         'verified': True},
                                             'resolutions': ['720P', '1080P'],
                                             'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4'],
                                             'api_contract_verified': True}},
@@ -312,8 +261,10 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                    'concurrency': 5,
                                    'price_per_second': 1.0,
                                    'capabilities': {'ability_type': 'image_to_video',
-                                                    'ability_types': ['first_frame_i2v', 'native_audio'],
-                                                    'adapter_ability_types': ['first_frame_i2v', 'native_audio'],
+                                                    'ability_types': ['first_frame_i2v',
+                                                                      'native_audio'],
+                                                    'adapter_ability_types': ['first_frame_i2v',
+                                                                              'native_audio'],
                                                     'input_modalities': ['text', 'image'],
                                                     'adapter_input_modalities': ['text', 'image'],
                                                     'duration': {'min': 3,
@@ -322,66 +273,28 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                  'verified': True},
                                                     'resolutions': ['720P', '1080P'],
                                                     'api_contract_verified': True}},
-            'kling-v3': {'name': 'Kling V3',
-                         'provider': 'kling',
-                         'type': ['video'],
-                         'concurrency': 10,
-                         'price_per_second': 1.0,
-                         'capabilities': {'ability_type': 'image_to_video',
-                                          'ability_types': ['text_to_video',
-                                                            'image_to_video',
-                                                            'start_end_frame_i2v',
-                                                            'native_audio',
-                                                            'multi_shot',
-                                                            'element_reference'],
-                                          'adapter_ability_types': ['first_frame_i2v', 'native_audio'],
-                                          'input_modalities': ['text', 'image'],
-                                          'adapter_input_modalities': ['text', 'image'],
-                                          'duration': {'min': 3, 'max': 15, 'integer': True, 'verified': True},
-                                          'resolutions': ['720P', '1080P'],
-                                          'api_contract_verified': False}},
-            'kling-v2-6': {'name': 'Kling V2.6',
-                           'provider': 'kling',
-                           'type': ['video'],
-                           'concurrency': 10,
-                           'price_per_second': 0.5,
-                           'capabilities': {'ability_type': 'image_to_video',
-                                            'ability_types': ['text_to_video',
-                                                              'image_to_video',
-                                                              'start_end_frame_i2v',
-                                                              'native_audio'],
-                                            'adapter_ability_types': ['first_frame_i2v', 'native_audio'],
-                                            'input_modalities': ['text', 'image'],
-                                            'adapter_input_modalities': ['text', 'image'],
-                                            'api_contract_verified': False}},
-            'kling-v2-5-turbo': {'name': 'Kling V2.5 Turbo',
-                                 'provider': 'kling',
-                                 'type': ['video'],
-                                 'concurrency': 10,
-                                 'price_per_second': 0.3,
-                                 'capabilities': {'ability_type': 'image_to_video',
-                                                  'ability_types': ['image_to_video'],
-                                                  'adapter_ability_types': ['first_frame_i2v', 'native_audio'],
-                                                  'input_modalities': ['text', 'image'],
-                                                  'adapter_input_modalities': ['text', 'image'],
-                                                  'api_contract_verified': False}},
             'doubao-seedance-2-0-260128': {'name': 'Seedance 2.0',
                                            'provider': 'ark',
                                            'family': 'seedance',
                                            'type': ['video'],
                                            'concurrency': 10,
-                                           'price_per_second': 0.5,
+                                           'price_per_second': 0.99,
                                            'capabilities': {'ability_type': 'image_to_video',
-                                                            'ability_types': ['text_to_video', 'image_to_video'],
+                                                            'ability_types': ['text_to_video',
+                                                                              'image_to_video'],
                                                             'adapter_ability_types': ['first_frame_i2v',
                                                                                       'native_audio'],
                                                             'input_modalities': ['text', 'image'],
-                                                            'adapter_input_modalities': ['text', 'image'],
-                                                            'duration': {'min': 2,
-                                                                         'max': 12,
+                                                            'adapter_input_modalities': ['text',
+                                                                                         'image'],
+                                                            'duration': {'min': 4,
+                                                                         'max': 15,
                                                                          'integer': True,
                                                                          'verified': True},
-                                                            'resolutions': ['720p', '1080p'],
+                                                            'resolutions': ['480p',
+                                                                            '720p',
+                                                                            '1080p',
+                                                                            '4k'],
                                                             'ratios': ['16:9',
                                                                        '4:3',
                                                                        '1:1',
@@ -395,20 +308,22 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                 'family': 'seedance',
                                                 'type': ['video'],
                                                 'concurrency': 10,
-                                                'price_per_second': 0.3,
+                                                'price_per_second': 0.8,
                                                 'capabilities': {'ability_type': 'image_to_video',
                                                                  'ability_types': ['text_to_video',
                                                                                    'image_to_video',
                                                                                    'fast_generation'],
                                                                  'adapter_ability_types': ['first_frame_i2v',
                                                                                            'native_audio'],
-                                                                 'input_modalities': ['text', 'image'],
-                                                                 'adapter_input_modalities': ['text', 'image'],
-                                                                 'duration': {'min': 2,
-                                                                              'max': 12,
+                                                                 'input_modalities': ['text',
+                                                                                      'image'],
+                                                                 'adapter_input_modalities': ['text',
+                                                                                              'image'],
+                                                                 'duration': {'min': 4,
+                                                                              'max': 15,
                                                                               'integer': True,
                                                                               'verified': True},
-                                                                 'resolutions': ['720p', '1080p'],
+                                                                 'resolutions': ['480p', '720p'],
                                                                  'ratios': ['16:9',
                                                                             '4:3',
                                                                             '1:1',
@@ -435,7 +350,10 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                       'voice_reference'],
                                             'input_modalities': ['text', 'image', 'audio', 'video'],
                                             'adapter_input_modalities': ['text', 'image', 'audio'],
-                                            'duration': {'min': 2, 'max': 10, 'integer': True, 'verified': True},
+                                            'duration': {'min': 2,
+                                                         'max': 10,
+                                                         'integer': True,
+                                                         'verified': True},
                                             'resolutions': ['720P', '1080P'],
                                             'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4'],
                                             'api_contract_verified': True}},
@@ -450,10 +368,16 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                     'action_transfer',
                                                                     'instruction_editing',
                                                                     'video_transfer'],
-                                                  'adapter_ability_types': ['action_transfer', 'video_editing'],
+                                                  'adapter_ability_types': ['action_transfer',
+                                                                            'video_editing'],
                                                   'input_modalities': ['text', 'image', 'video'],
-                                                  'adapter_input_modalities': ['text', 'image', 'video'],
-                                                  'duration': {'min': 2, 'max': 10, 'integer': True, 'verified': True},
+                                                  'adapter_input_modalities': ['text',
+                                                                               'image',
+                                                                               'video'],
+                                                  'duration': {'min': 2,
+                                                               'max': 10,
+                                                               'integer': True,
+                                                               'verified': True},
                                                   'resolutions': ['720P', '1080P'],
                                                   'ratios': ['16:9', '9:16', '1:1', '4:3', '3:4'],
                                                   'api_contract_verified': True}},
@@ -469,7 +393,8 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                       'multi_character',
                                                                       'native_audio',
                                                                       'multi_shot'],
-                                                    'adapter_ability_types': ['reference_to_video', 'digital_human'],
+                                                    'adapter_ability_types': ['reference_to_video',
+                                                                              'digital_human'],
                                                     'input_modalities': ['text', 'image'],
                                                     'adapter_input_modalities': ['text', 'image'],
                                                     'duration': {'min': 3,
@@ -492,57 +417,65 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'deepseek-chat': {'name': 'DeepSeek C
                                                                              'native_audio'],
                                                            'adapter_ability_types': ['action_transfer',
                                                                                      'video_editing'],
-                                                           'input_modalities': ['text', 'image', 'video'],
-                                                           'adapter_input_modalities': ['text', 'image', 'video'],
+                                                           'input_modalities': ['text',
+                                                                                'image',
+                                                                                'video'],
+                                                           'adapter_input_modalities': ['text',
+                                                                                        'image',
+                                                                                        'video'],
                                                            'duration': {'min': 3,
                                                                         'max': 15,
                                                                         'integer': True,
                                                                         'verified': True},
                                                            'resolutions': ['720P', '1080P'],
-                                                           'api_contract_verified': True}},
-            'seedance-1-0-pro': {'name': 'Seedance 1.0 Pro',
-                                 'provider': 'ark',
-                                 'family': 'seedance',
-                                 'type': ['video'],
-                                 'concurrency': 10,
-                                 'price_per_second': 0.5,
-                                 'capabilities': {'ability_type': 'image_to_video',
-                                                  'ability_types': [],
-                                                  'adapter_ability_types': ['first_frame_i2v'],
-                                                  'api_contract_verified': False}},
-            'seedance-1-0-lite': {'name': 'Seedance 1.0 Lite',
-                                  'provider': 'ark',
-                                  'family': 'seedance',
-                                  'type': ['video'],
-                                  'concurrency': 10,
-                                  'price_per_second': 0.3,
-                                  'capabilities': {'ability_type': 'image_to_video',
-                                                   'ability_types': [],
-                                                   'adapter_ability_types': ['first_frame_i2v'],
-                                                   'api_contract_verified': False}}}}
+                                                           'api_contract_verified': True}}}}
+
+
 
 
 def load_model_config() -> dict[str, Any]:
-    return MODEL_CONFIG
+    """Return built-in models plus currently configured OpenAI-compatible models."""
+    registry = deepcopy(MODEL_CONFIG)
+    configured = (
+        Config.CONFIG.get("api_providers", {})
+        .get("openai_compatible", {})
+        .get("models", [])
+    )
+    if not isinstance(configured, list):
+        logger.warning("openai_compatible.models 必须是列表，已忽略")
+        return registry
+
+    for entry in configured:
+        if not isinstance(entry, dict):
+            logger.warning("openai_compatible.models 中有非对象条目，已忽略")
+            continue
+        model_id = str(entry.get("id") or "").strip()
+        types = entry.get("type") or []
+        if isinstance(types, str):
+            types = [types]
+        if not model_id or not isinstance(types, list) or not types or any(
+            item not in {"llm", "vlm"} for item in types
+        ):
+            logger.warning("openai_compatible.models 条目缺少合法 id/type，已忽略")
+            continue
+        if model_id in registry["models"]:
+            logger.warning("openai_compatible 模型 ID 与内置模型冲突，已忽略: %s", model_id)
+            continue
+        registry["models"][model_id] = {
+            "name": str(entry.get("name") or model_id),
+            "provider": "openai_compatible",
+            "type": list(dict.fromkeys(types)),
+            "concurrency": 10,
+        }
+    return registry
 
 
 def get_model_config(model: str) -> dict[str, Any]:
-    """Get metadata for one model, with a loose fallback for provider aliases."""
-    models = MODEL_CONFIG.get("models", {})
+    """Find a model by its exact ID or raise with the available IDs."""
+    models = load_model_config()["models"]
     if model in models:
         return models[model]
-
-    model_lower = model.lower()
-    for key, value in models.items():
-        if key in model_lower or model_lower in key:
-            return value
-
-    return {
-        "name": model,
-        "provider": "unknown",
-        "type": [],
-        "concurrency": 3,
-    }
+    raise ValueError(f"未知模型: {model}；可用模型: {', '.join(sorted(models))}")
 
 
 def get_max_concurrency(model: str, enable_concurrency: bool = False) -> int:
@@ -553,7 +486,7 @@ def get_max_concurrency(model: str, enable_concurrency: bool = False) -> int:
 
 def get_models_by_type(model_type: str) -> list[dict[str, Any]]:
     result = []
-    for model_id, metadata in MODEL_CONFIG.get("models", {}).items():
+    for model_id, metadata in load_model_config()["models"].items():
         if model_type in (metadata.get("type") or []):
             result.append({"id": model_id, **metadata})
     return result
@@ -587,7 +520,7 @@ def model_type_capabilities(model_type: str, metadata: Optional[dict[str, Any]] 
 
 def model_records(media_type: Optional[str] = None) -> list[dict[str, Any]]:
     records = []
-    for model_id, metadata in MODEL_CONFIG.get("models", {}).items():
+    for model_id, metadata in load_model_config()["models"].items():
         resolved_media_type = _resolve_media_type(metadata.get("type") or [])
         if media_type and resolved_media_type != media_type:
             continue
@@ -614,16 +547,19 @@ def list_api_models(
 def parse_api_model(model: str, media_type: str) -> tuple[str, str]:
     if model and model.startswith("api/"):
         _, provider, model_id = model.split("/", 2)
+        metadata = get_model_config(model_id)
+        if metadata.get("provider") != provider or _resolve_media_type(metadata.get("type") or []) != media_type:
+            raise ValueError(f"模型与 provider/类型不匹配: {model}")
         return provider, model_id
 
-    metadata = MODEL_CONFIG.get("models", {}).get(model)
+    metadata = load_model_config()["models"].get(model)
     if metadata and _resolve_media_type(metadata.get("type") or []) == media_type:
         return metadata.get("provider", ""), model
-    return "", model
+    raise ValueError(f"未知的{media_type}模型: {model}；可用模型: {', '.join(record['model'] for record in model_records(media_type))}")
 
 
 def media_capabilities(provider: str, model: str, media_type: str) -> dict[str, Any]:
-    metadata = MODEL_CONFIG.get("models", {}).get(model, {})
+    metadata = load_model_config()["models"].get(model, {})
     capabilities = metadata.get("capabilities")
     if capabilities:
         return deepcopy(capabilities)
