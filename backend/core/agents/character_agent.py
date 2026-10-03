@@ -393,7 +393,6 @@ class CharacterDesignerAgent(AgentInterface):
     # ─── 核心流程 ───
 
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
-        from config import settings
         from models.image_client import ImageClient
 
         sid = input_data["session_id"]
@@ -408,15 +407,7 @@ class CharacterDesignerAgent(AgentInterface):
         logger.info(f"[CharacterAgent] 使用并发数={max_concurrency}")
         concurrency = max_concurrency
 
-        img_client = ImageClient(
-            dashscope_api_key=settings.DASHSCOPE_API_KEY,
-            dashscope_base_url=settings.DASHSCOPE_BASE_URL,
-            gpt_api_key=settings.OPENAI_API_KEY,
-            gpt_base_url=settings.OPENAI_BASE_URL,
-            proxy=settings.provider_proxy("openai"),
-            ark_api_key=settings.ARK_API_KEY,
-            ark_base_url=settings.ARK_BASE_URL,
-        )
+        img_client = ImageClient()
 
         # ═══════════ 介入: 重新生成指定素材 ═══════════
         if intervention:

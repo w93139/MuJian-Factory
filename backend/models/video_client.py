@@ -1,32 +1,18 @@
 """
 统一视频生成客户端
-根据 model 名称自动路由到对应后端：
-  - wan*      → DashscopeVideoClient (DashScope VideoSynthesis)
-  - kling*    → KlingVideoClient (可灵 AI)
+根据模型注册表路由到 DashScope 或 Ark。
 """
 
+import logging
 import os
 import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
-import logging
 from typing import Optional
 
 from config import Config
+from models.config_model import get_model_config
+from models.video_dashscope import DashscopeVideoClient
+from models.video_seedance import SeedanceVideoClient
 from path_utils import absolute_path, media_reference_path
-
-try:
-    from models.video_dashscope import DashscopeVideoClient
-    from models.video_kling import KlingVideoClient
-    from models.video_seedance import SeedanceVideoClient
-except ImportError:
-    from video_dashscope import DashscopeVideoClient
-    from video_kling import KlingVideoClient
-    from video_seedance import SeedanceVideoClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,53 +23,25 @@ class VideoClient:
     参照 ImageClient 模式，按模型名路由到不同后端
     """
 
-    def __init__(
-        self,
-        dashscope_api_key: Optional[str] = None,
-        dashscope_base_url: Optional[str] = None,
-        kling_access_key: Optional[str] = None,
-        kling_secret_key: Optional[str] = None,
-        kling_base_url: Optional[str] = None,
-        ark_api_key: Optional[str] = None,
-        ark_base_url: Optional[str] = None,
-    ):
-        self._dashscope_api_key = dashscope_api_key or Config.DASHSCOPE_API_KEY
-        self._dashscope_base_url = dashscope_base_url or Config.DASHSCOPE_BASE_URL
-        self._kling_access_key = kling_access_key or Config.KLING_ACCESS_KEY
-        self._kling_secret_key = kling_secret_key or Config.KLING_SECRET_KEY
-        self._kling_base_url = kling_base_url or Config.KLING_BASE_URL
-        self._ark_api_key = ark_api_key or Config.ARK_API_KEY
-        self._ark_base_url = ark_base_url or Config.ARK_BASE_URL
-
+    def __init__(self):
         self._dashscope_client = None
-        self._kling_client = None
         self._seedance_client = None
 
     @property
     def Dashscope_client(self):
         if self._dashscope_client is None:
             self._dashscope_client = DashscopeVideoClient(
-                api_key=self._dashscope_api_key,
-                base_url=self._dashscope_base_url,
+                api_key=Config.DASHSCOPE_API_KEY,
+                base_url=Config.DASHSCOPE_BASE_URL,
             )
         return self._dashscope_client
-
-    @property
-    def kling_client(self):
-        if self._kling_client is None:
-            self._kling_client = KlingVideoClient(
-                access_key=self._kling_access_key,
-                secret_key=self._kling_secret_key,
-                base_url=self._kling_base_url,
-            )
-        return self._kling_client
 
     @property
     def seedance_client(self):
         if self._seedance_client is None:
             self._seedance_client = SeedanceVideoClient(
-                api_key=self._ark_api_key,
-                base_url=self._ark_base_url,
+                api_key=Config.ARK_API_KEY,
+                base_url=Config.ARK_BASE_URL,
             )
         return self._seedance_client
 
@@ -92,7 +50,7 @@ class VideoClient:
         prompt: str,
         image_path: Optional[str],
         save_path: str,
-        model: str = "wan2.7-i2v",
+        model: Optional[str] = None,
         duration: int = 5,
         shot_type: str = "multi",
         sound: str = "",
@@ -141,8 +99,7 @@ class VideoClient:
         reference_video_paths = [media_reference_path(path) for path in reference_video_paths] if reference_video_paths else None
         reference_audio_path = media_reference_path(reference_audio_path)
         audio_path = media_reference_path(audio_path)
-        if not model:
-            model = "wan2.7-i2v"
+        model = model or Config.VIDEO_FIRST_FRAME_MODEL
 
         # 确保 duration 是整数,视频模型通常要求整数秒
         duration = int(duration)
@@ -183,23 +140,12 @@ class VideoClient:
             ])
             logger.info("\n%s", "\n".join(lines))
 
-        model_lower = model.lower()
+        model_info = get_model_config(model)
+        if "video" not in model_info.get("type", []):
+            raise ValueError(f"模型不支持视频生成: {model}")
+        provider = model_info["provider"]
 
-        if "kling" in model_lower:
-            result = self._generate_kling(
-                prompt,
-                image_path,
-                save_path,
-                model,
-                duration,
-                sound,
-                video_ratio,
-                resolution,
-                mode,
-                cfg_scale,
-                negative_prompt or "",
-            )
-        elif "seedance" in model_lower:
+        if provider == "ark":
             result = self._generate_seedance(
                 prompt,
                 image_path,
@@ -212,7 +158,7 @@ class VideoClient:
                 watermark,
                 generate_audio,
             )
-        elif "wan" in model_lower or "happyhorse" in model_lower:
+        elif provider == "dashscope":
             result = self._generate_wan(
                 prompt,
                 image_path,
@@ -236,7 +182,7 @@ class VideoClient:
                 audio,
             )
         else:
-            raise ValueError(f"未知的视频生成模型: {model}")
+            raise ValueError(f"视频模型平台不受支持: {provider}")
         if not result:
             raise RuntimeError(f"视频生成没有返回结果: model={model}")
         return result
@@ -295,36 +241,6 @@ class VideoClient:
             watermark=watermark,
             seed=seed,
             audio=audio,
-        )
-
-    def _generate_kling(
-        self,
-        prompt: str,
-        image_path: Optional[str],
-        save_path: str,
-        model: str,
-        duration: int = 5,
-        sound: str = "",
-        video_ratio: str = "16:9",
-        resolution: Optional[str] = None,
-        mode: str = "pro",
-        cfg_scale: float = 0.5,
-        negative_prompt: str = "",
-    ) -> str:
-        """通过可灵模型生成视频"""
-        logger.info("VideoClient routed to Kling: model=%s", model)
-        return self.kling_client.generate_video(
-            prompt=prompt,
-            image_path=image_path,
-            save_path=save_path,
-            model=model,
-            duration=duration,
-            sound=sound,
-            video_ratio=video_ratio,
-            resolution=resolution,
-            mode=mode,
-            cfg_scale=cfg_scale,
-            negative_prompt=negative_prompt,
         )
 
     def _generate_seedance(

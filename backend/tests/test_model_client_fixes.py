@@ -144,7 +144,7 @@ def test_video_client_rejects_empty_result(tmp_path):
     client._seedance_client = MagicMock()
     client._seedance_client.generate_video.return_value = ""
     with pytest.raises(RuntimeError, match="没有返回结果"):
-        client.generate_video("scene", None, str(tmp_path / "out.mp4"), model="seedance")
+        client.generate_video("scene", None, str(tmp_path / "out.mp4"), model="doubao-seedance-2-0-260128")
 
 
 @pytest.mark.asyncio
@@ -166,9 +166,9 @@ async def test_sandbox_empty_images_are_failures(route, payload):
 
 def test_llm_uses_configured_default_model_without_mutable_images():
     client = LLM()
-    client._dashscope_client = MagicMock()
-    client._dashscope_client.query.return_value = "ok"
+    client.chat_client = MagicMock()
+    client.chat_client.query.return_value = "ok"
     with patch("models.llm_client.Config.LLM_MODEL", "qwen3-max"):
         assert client.query("hello") == "ok"
-    assert client._dashscope_client.query.call_args.kwargs["model"] == "qwen3-max"
-    assert client._dashscope_client.query.call_args.kwargs["image_urls"] == []
+    assert client.chat_client.query.call_args.kwargs["model"] == "qwen3-max"
+    assert client.chat_client.query.call_args.kwargs["image_urls"] is None

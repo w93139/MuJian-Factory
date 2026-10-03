@@ -1,56 +1,26 @@
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
 import logging
+import os
 import re
 from typing import List, Optional
 
 from config import Config
+from models.config_model import get_model_config
+from models.image_dashscope import DashScopeClient
+from models.image_processor import ImageProcessor
+from models.image_seedream import SeedreamClient
 from path_utils import absolute_path, media_reference_path
-
-try:
-    from models.image_dashscope import DashScopeClient
-    from models.image_gpt import ImageGPT
-    from models.image_processor import ImageProcessor
-    from models.image_seedream import SeedreamClient
-except ImportError:
-    from .image_dashscope import DashScopeClient
-    from .image_gpt import ImageGPT
-    from .image_processor import ImageProcessor
-    from .image_seedream import SeedreamClient
 
 logger = logging.getLogger(__name__)
 
 
 class ImageClient:
-    def __init__(self,
-                 dashscope_api_key: Optional[str] = None,
-                 dashscope_base_url: Optional[str] = None,
-                 gpt_api_key: Optional[str] = None,
-                 gpt_base_url: Optional[str] = None,
-                 proxy: Optional[str] = None,
-                 ark_api_key: Optional[str] = None,
-                 ark_base_url: Optional[str] = None):
+    def __init__(self):
         """
         Unified Image Generation Client
-        Routes requests to DashScope, Seedream, or GPT based on model name.
+        Routes requests to DashScope or Ark using the model registry.
         """
-        self._dashscope_api_key = dashscope_api_key
-        self._dashscope_base_url = dashscope_base_url
-        self._ark_api_key = ark_api_key
-        self._ark_base_url = ark_base_url
-        self._gpt_api_key = gpt_api_key
-        self._gpt_base_url = gpt_base_url
-        self._proxy = Config.provider_proxy("openai") if proxy is None else proxy
-
         self._dashscope_client = None
         self._seedream_client = None
-        self._gpt_client = None
 
         # Initialize Image Processor for downloads
         self.image_processor = ImageProcessor()
@@ -62,8 +32,8 @@ class ImageClient:
     def dashscope_client(self):
         if self._dashscope_client is None:
             self._dashscope_client = DashScopeClient(
-                api_key=self._dashscope_api_key,
-                base_url=self._dashscope_base_url,
+                api_key=Config.DASHSCOPE_API_KEY,
+                base_url=Config.DASHSCOPE_BASE_URL,
             )
         return self._dashscope_client
 
@@ -71,25 +41,15 @@ class ImageClient:
     def seedream_client(self):
         if self._seedream_client is None:
             self._seedream_client = SeedreamClient(
-                api_key=self._ark_api_key,
-                base_url=self._ark_base_url,
+                api_key=Config.ARK_API_KEY,
+                base_url=Config.ARK_BASE_URL,
             )
         return self._seedream_client
-
-    @property
-    def gpt_client(self):
-        if self._gpt_client is None:
-            self._gpt_client = ImageGPT(
-                api_key=self._gpt_api_key,
-                base_url=self._gpt_base_url,
-                proxy=self._proxy,
-            )
-        return self._gpt_client
 
     def generate_image(self,
                        prompt: str,
                        image_paths: Optional[List[str]] = None,
-                       model: str = "wan2.7-image",
+                       model: Optional[str] = None,
                        save_dir: Optional[str] = None,
                        session_id: Optional[str] = None,
                        video_ratio: Optional[str] = "16:9",
@@ -153,8 +113,7 @@ class ImageClient:
         # Default fallback if ratio or resolution is not found
         size = custom_size or size_map.get(video_ratio, size_map["16:9"]).get(resolution, "1920*1080")
 
-        if not model:
-            model = "wan2.7-image"  # Default model
+        model = model or Config.IMAGE_T2I_MODEL
 
         if Config.PRINT_MODEL_INPUT:
             lines = [
@@ -176,9 +135,10 @@ class ImageClient:
             lines.append("-" * 30)
             logger.info("\n%s", "\n".join(lines))
             
-        # Determine backend provider
-        is_seedream = "seedream" in model.lower()
-        is_sora = "sora" in model.lower() or "gpt" in model.lower()
+        model_info = get_model_config(model)
+        if not set(model_info.get("type", [])) & {"t2i", "i2i"}:
+            raise ValueError(f"模型不支持图片生成: {model}")
+        provider = model_info["provider"]
         
         # Prepare save directory
         if not save_dir:
@@ -190,7 +150,7 @@ class ImageClient:
         
         generated_local_paths = []
 
-        if is_seedream:
+        if provider == "ark":
             # --- Seedream Logic ---
             logger.info("ImageClient routed to Seedream: model=%s", model)
             paths = self.seedream_client.generate_image(
@@ -203,28 +163,7 @@ class ImageClient:
             )
             generated_local_paths.extend(paths or [])
 
-        elif is_sora:
-            # --- GPT/Sora Logic ---
-            logger.info("ImageClient routed to GPT/Sora: model=%s", model)
-            if image_paths:
-                logger.warning("Sora/GPT model only supports Text-to-Image. Ignoring reference images.")
-
-            # OpenAI uses 'x' separator, e.g. 1024x1024.
-            gpt_size = size.replace('*', 'x') if size else "1024x1024"
-
-            path = self.gpt_client.generate_image(
-                prompt=prompt,
-                size=gpt_size,
-                model=model,
-                save_dir=save_dir
-            )
-
-            if path and os.path.exists(path):
-                generated_local_paths.append(path)
-            else:
-                raise RuntimeError(f"GPT/Sora returned invalid path or download failed: {path}")
-
-        else:
+        elif provider == "dashscope":
             # --- DashScope Logic ---
             logger.info("ImageClient routed to DashScope: model=%s", model)
 
@@ -256,6 +195,8 @@ class ImageClient:
                     save_dir=save_dir
                 )
             generated_local_paths.extend(paths or [])
+        else:
+            raise ValueError(f"图片模型平台不受支持: {provider}")
 
         if not generated_local_paths:
             raise RuntimeError(f"图片生成没有返回结果: model={model}")

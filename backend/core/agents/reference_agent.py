@@ -599,15 +599,7 @@ class ReferenceGeneratorAgent(AgentInterface):
             if sid_in_json and vp:
                 session_visual_prompts[sid_in_json] = vp
 
-        img_client = ImageClient(
-            dashscope_api_key=settings.DASHSCOPE_API_KEY,
-            dashscope_base_url=settings.DASHSCOPE_BASE_URL,
-            gpt_api_key=settings.OPENAI_API_KEY,
-            gpt_base_url=settings.OPENAI_BASE_URL,
-            proxy=settings.provider_proxy("openai"),
-            ark_api_key=settings.ARK_API_KEY,
-            ark_base_url=settings.ARK_BASE_URL,
-        )
+        img_client = ImageClient()
 
         episodes = artifacts.get('storyboard', {}).get('episodes', [])
         if not episodes:
