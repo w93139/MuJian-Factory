@@ -30,3 +30,4 @@ docs/codex/
 
 # Source copy; frontend/public and frontend/app contain the shipped logo
 /logo.png
+deploy/certs/

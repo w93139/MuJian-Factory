@@ -1,0 +1,52 @@
+name: mujian
+
+services:
+  backend:
+    container_name: mujian-backend
+    image: mujian-backend:local
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    volumes:
+      - ./backend/code:/app/code
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    container_name: mujian-frontend
+    image: mujian-frontend:local
+    build:
+      context: ./frontend
+      args:
+        BACKEND_API_URL: http://backend:8000
+    environment:
+      BACKEND_API_URL: http://backend:8000
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    container_name: mujian-nginx
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
