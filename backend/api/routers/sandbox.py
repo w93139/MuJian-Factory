@@ -320,6 +320,8 @@ async def sandbox_t2i(req: SandboxT2IRequest):
             image_paths=None,
             video_ratio=req.ratio,
         )
+        if not result:
+            raise RuntimeError(f"图片生成没有返回结果: model={req.model}")
         # result 是图片路径列表
         # 保存到历史记录
         record_id = _add_record(
@@ -365,6 +367,8 @@ async def sandbox_i2i(req: SandboxI2IRequest):
             model=req.model,
             video_ratio=req.ratio,
         )
+        if not result:
+            raise RuntimeError(f"图片生成没有返回结果: model={req.model}")
         # 保存到历史记录
         record_id = _add_record(
             tool="i2i",

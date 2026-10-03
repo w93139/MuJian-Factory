@@ -14,17 +14,16 @@ if backend_dir not in sys.path:
 
 import logging
 import time
-from typing import Optional
 from http import HTTPStatus
+from typing import Optional
 
 try:
-    import dashscope
     from dashscope import VideoSynthesis
 except ImportError:
-    dashscope = None
     VideoSynthesis = None
 import requests
 from requests import exceptions as requests_exceptions
+
 from config import Config
 from path_utils import absolute_path
 
@@ -45,10 +44,6 @@ class DashscopeVideoClient:
         self.api_key = api_key or Config.DASHSCOPE_API_KEY
         self.base_url = base_url or Config.DASHSCOPE_BASE_URL
 
-        if dashscope and self.api_key:
-            dashscope.api_key = self.api_key
-        if dashscope and self.base_url:
-            dashscope.base_http_api_url = self.base_url
 
     _RETRYABLE_EXCEPTIONS = (
         requests_exceptions.ConnectionError,
@@ -192,6 +187,7 @@ class DashscopeVideoClient:
 
             call_kwargs = {
                 "api_key": self.api_key,
+                "base_address": self.base_url,
                 "model": model,
                 "prompt": prompt,
                 "media": media,
@@ -213,7 +209,7 @@ class DashscopeVideoClient:
 
             rsp = self._with_network_retry(
                 "submit task",
-                lambda: VideoSynthesis.call(**call_kwargs),
+                lambda: VideoSynthesis.async_call(**call_kwargs),
             )
         elif self._is_video_edit_model(model):
             media = self._build_video_edit_media(
@@ -225,6 +221,7 @@ class DashscopeVideoClient:
 
             call_kwargs = {
                 "api_key": self.api_key,
+                "base_address": self.base_url,
                 "model": model,
                 "prompt": prompt,
                 "media": media,
@@ -244,7 +241,7 @@ class DashscopeVideoClient:
 
             rsp = self._with_network_retry(
                 "submit task",
-                lambda: VideoSynthesis.call(**call_kwargs),
+                lambda: VideoSynthesis.async_call(**call_kwargs),
             )
         elif model.startswith("wan2.7") or "happyhorse" in model:
             # wan2.7 series use the new API format with 'media'
@@ -260,6 +257,7 @@ class DashscopeVideoClient:
 
             call_kwargs = {
                 "api_key": self.api_key,
+                "base_address": self.base_url,
                 "model": model,
                 "prompt": prompt,
                 "media": media,
@@ -279,7 +277,7 @@ class DashscopeVideoClient:
 
             rsp = self._with_network_retry(
                 "submit task",
-                lambda: VideoSynthesis.call(**call_kwargs),
+                lambda: VideoSynthesis.async_call(**call_kwargs),
             )
         else:
             # Older models (wan2.1, wan2.6 etc.) use 'img_url' and 'shot_type'
@@ -288,6 +286,7 @@ class DashscopeVideoClient:
 
             call_kwargs = {
                 "api_key": self.api_key,
+                "base_address": self.base_url,
                 "model": model,
                 "prompt": prompt,
                 "img_url": self._to_media_url(image_path),
@@ -309,7 +308,7 @@ class DashscopeVideoClient:
 
             rsp = self._with_network_retry(
                 "submit task",
-                lambda: VideoSynthesis.call(**call_kwargs),
+                lambda: VideoSynthesis.async_call(**call_kwargs),
             )
 
         if rsp.status_code != HTTPStatus.OK:
@@ -318,21 +317,20 @@ class DashscopeVideoClient:
                 f"code={rsp.code}, message={rsp.message}"
             )
 
-        video_url = self._extract_video_url(rsp)
-        if not video_url:
-            task_id = self._extract_task_id(rsp)
-            task_status = self._extract_task_status(rsp)
-            if not task_id:
-                raise RuntimeError(
-                    "万象视频 API 未返回 video_url 或 task_id，无法查询结果: "
-                    f"status={rsp.status_code}, code={rsp.code}, message={rsp.message}, "
-                    f"task_status={task_status}"
-                )
+        task_id = self._extract_task_id(rsp)
+        if not task_id:
+            raise RuntimeError(
+                "万象视频 API 未返回 task_id，无法查询结果: "
+                f"status={rsp.status_code}, code={rsp.code}, message={rsp.message}"
+            )
 
-            logger.info(f"DashscopeVideoClient: 任务已提交 task_id={task_id}, status={task_status}; 等待生成完成...")
+        logger.info("DashscopeVideoClient: 任务已提交 task_id=%s；等待生成完成...", task_id)
+        for poll in range(120):
+            # SDK 的 fetch() 没有 base_address 参数；_get() 仅查询已提交的任务。
+            # 网络重试严格限于查询，绝不重新执行 async_call。
             rsp = self._with_network_retry(
-                f"wait task {task_id}",
-                lambda: VideoSynthesis.wait(task=rsp, api_key=self.api_key),
+                f"fetch task {task_id}",
+                lambda: VideoSynthesis._get(task_id, api_key=self.api_key, base_address=self.base_url),
                 max_attempts=8,
                 base_delay=5.0,
             )
@@ -342,14 +340,24 @@ class DashscopeVideoClient:
                     f"code={rsp.code}, message={rsp.message}, task_id={task_id}"
                 )
 
+            task_status = (self._extract_task_status(rsp) or "").upper()
             video_url = self._extract_video_url(rsp)
-            task_status = self._extract_task_status(rsp)
-            if not video_url:
+            if task_status == "SUCCEEDED":
+                if not video_url:
+                    raise RuntimeError(
+                        "万象视频任务完成后仍未返回 video_url: "
+                        f"task_id={task_id}, output={self._safe_output_repr(rsp)}"
+                    )
+                break
+            if task_status in {"FAILED", "CANCELED", "UNKNOWN"}:
                 raise RuntimeError(
-                    "万象视频任务完成后仍未返回 video_url: "
-                    f"code={rsp.code}, message={rsp.message}, task_id={task_id}, task_status={task_status}, "
+                    f"万象视频任务失败: task_id={task_id}, task_status={task_status}, "
                     f"output={self._safe_output_repr(rsp)}"
                 )
+            if poll < 119:
+                time.sleep(5)
+        else:
+            raise TimeoutError(f"万象视频任务超时: task_id={task_id}")
 
         logger.info(f"DashscopeVideoClient: 视频生成成功: {video_url}")
 

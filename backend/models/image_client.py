@@ -6,24 +6,23 @@ backend_dir = os.path.dirname(models_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-import re
-import time
-import uuid
 import logging
+import re
 from typing import List, Optional
+
 from config import Config
 from path_utils import absolute_path, media_reference_path
 
 try:
     from models.image_dashscope import DashScopeClient
-    from models.image_seedream import SeedreamClient
     from models.image_gpt import ImageGPT
     from models.image_processor import ImageProcessor
+    from models.image_seedream import SeedreamClient
 except ImportError:
     from .image_dashscope import DashScopeClient
-    from .image_seedream import SeedreamClient
     from .image_gpt import ImageGPT
     from .image_processor import ImageProcessor
+    from .image_seedream import SeedreamClient
 
 logger = logging.getLogger(__name__)
 
@@ -193,89 +192,71 @@ class ImageClient:
 
         if is_seedream:
             # --- Seedream Logic ---
-            try:
-                logger.info("ImageClient routed to Seedream: model=%s", model)
-
-                paths = self.seedream_client.generate_image(
-                    prompt=prompt,
-                    model=model,
-                    session_id=session_id or "default",
-                    size=size or "2048*2048",
-                    image_paths=image_paths
-                )
-
-                if paths:
-                    generated_local_paths.extend(paths)
-
-            except Exception as e:
-                logger.exception("Seedream generation failed: %s", e)
+            logger.info("ImageClient routed to Seedream: model=%s", model)
+            paths = self.seedream_client.generate_image(
+                prompt=prompt,
+                model=model,
+                session_id=session_id or "default",
+                size=size or "2048*2048",
+                image_paths=image_paths,
+                save_dir=save_dir,
+            )
+            generated_local_paths.extend(paths or [])
 
         elif is_sora:
             # --- GPT/Sora Logic ---
-            try:
-                logger.info("ImageClient routed to GPT/Sora: model=%s", model)
-                if image_paths:
-                    logger.warning("Sora/GPT model only supports Text-to-Image. Ignoring reference images.")
-                
-                # OpenAI uses 'x' separator, e.g. 1024x1024
-                # Attempt to map size if needed or just replace '*'
-                gpt_size = size.replace('*', 'x') if size else "1024x1024"
+            logger.info("ImageClient routed to GPT/Sora: model=%s", model)
+            if image_paths:
+                logger.warning("Sora/GPT model only supports Text-to-Image. Ignoring reference images.")
 
-                path = self.gpt_client.generate_image(
-                    prompt=prompt,
-                    size=gpt_size,
-                    model=model,
-                    save_dir=save_dir
-                )
-                
-                if path and os.path.exists(path):
-                    generated_local_paths.append(path)
-                else:
-                    logger.error("GPT/Sora returned invalid path or download failed: %s", path)
+            # OpenAI uses 'x' separator, e.g. 1024x1024.
+            gpt_size = size.replace('*', 'x') if size else "1024x1024"
 
-            except Exception as e:
-                logger.exception("GPT/Sora generation failed: %s", e)
+            path = self.gpt_client.generate_image(
+                prompt=prompt,
+                size=gpt_size,
+                model=model,
+                save_dir=save_dir
+            )
+
+            if path and os.path.exists(path):
+                generated_local_paths.append(path)
+            else:
+                raise RuntimeError(f"GPT/Sora returned invalid path or download failed: {path}")
 
         else:
             # --- DashScope Logic ---
-            try:
-                logger.info("ImageClient routed to DashScope: model=%s", model)
+            logger.info("ImageClient routed to DashScope: model=%s", model)
 
-                if image_paths and len(image_paths) > 0:
-                    # Pre-process image paths for DashScope
-                    # Convert local paths to file:// URIs if they aren't already URLs
-                    # DashScope SDK (via MultiModalConversation) handles file://
-                    formatted_urls = []
-                    for p in image_paths:
-                        if p.startswith("http") or p.startswith("file://"):
-                            formatted_urls.append(p)
-                        else:
-                            abs_path = absolute_path(p)
-                            formatted_urls.append(f"file://{abs_path}")
-                    
-                    paths = self.dashscope_client.edit_image(
-                        prompt=prompt,
-                        image_urls=formatted_urls,
-                        model=model,
-                        size=size,
-                        session_id=session_id,
-                        save_dir=save_dir
-                    )
-                else:
-                    # Text to Image
-                    # Assuming default size 1024*1024 or similar
-                    paths = self.dashscope_client.generate_image(
-                        prompt=prompt,
-                        model=model,
-                        size=size,
-                        session_id=session_id,
-                        save_dir=save_dir
-                    )
-                
-                if paths:
-                    generated_local_paths.extend(paths)
-                            
-            except Exception as e:
-                logger.exception("DashScope generation failed: %s", e)
+            if image_paths and len(image_paths) > 0:
+                # DashScope SDK handles local file:// references.
+                formatted_urls = []
+                for p in image_paths:
+                    if p.startswith("http") or p.startswith("file://"):
+                        formatted_urls.append(p)
+                    else:
+                        abs_path = absolute_path(p)
+                        formatted_urls.append(f"file://{abs_path}")
 
+                paths = self.dashscope_client.edit_image(
+                    prompt=prompt,
+                    image_urls=formatted_urls,
+                    model=model,
+                    size=size,
+                    session_id=session_id,
+                    save_dir=save_dir
+                )
+            else:
+                # Text to Image
+                paths = self.dashscope_client.generate_image(
+                    prompt=prompt,
+                    model=model,
+                    size=size,
+                    session_id=session_id,
+                    save_dir=save_dir
+                )
+            generated_local_paths.extend(paths or [])
+
+        if not generated_local_paths:
+            raise RuntimeError(f"图片生成没有返回结果: model={model}")
         return generated_local_paths

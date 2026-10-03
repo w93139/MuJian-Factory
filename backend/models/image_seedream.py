@@ -11,11 +11,14 @@ backend_dir = os.path.dirname(models_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-import time
 import logging
+import time
+from typing import Dict, List, Optional
+
 import httpx
-from typing import Optional, List, Dict
-from openai import OpenAI
+import requests
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
+
 from config import Config
 
 # 模型名称映射表（旧名称 -> 新名称）
@@ -75,11 +78,35 @@ class SeedreamClient:
             "base_url": self.base_url,
             "api_key": self.api_key,
             "timeout": timeout,
+            "max_retries": 0,
         }
         proxy = Config.provider_proxy("ark")
         if proxy:
             kwargs["http_client"] = httpx.Client(proxy=proxy, timeout=timeout)
         self.client = OpenAI(**kwargs)
+
+    @staticmethod
+    def _retryable(exc: Exception) -> bool:
+        if isinstance(exc, APIStatusError):
+            return exc.status_code == 429 or exc.status_code >= 500
+        if isinstance(exc, requests.HTTPError):
+            status = exc.response.status_code if exc.response is not None else None
+            return status == 429 or (status is not None and status >= 500)
+        return isinstance(exc, (
+            APITimeoutError, APIConnectionError, httpx.TimeoutException,
+            requests.Timeout, requests.ConnectionError,
+        ))
+
+    def _with_retry(self, action: str, operation):
+        for attempt in range(4):
+            try:
+                return operation()
+            except Exception as exc:
+                if not self._retryable(exc) or attempt == 3:
+                    raise
+                delay = 2 ** attempt
+                logging.warning("Seedream %s 失败，%s 秒后重试（%s/3）：%s", action, delay, attempt + 1, type(exc).__name__)
+                time.sleep(delay)
 
     def generate_image(
         self,
@@ -88,6 +115,7 @@ class SeedreamClient:
         model: str = "doubao-seedream-4-5-251128",
         size: str = "1920*1080",
         image_paths: Optional[List[str]] = None,
+        save_dir: Optional[str] = None,
         **kwargs
     ) -> List[str]:
         """
@@ -99,6 +127,7 @@ class SeedreamClient:
             model: 模型名称
             size: 生成图片的分辨率，如 "1920*1080", "1024*1024"
             image_paths: 参考图路径或URL列表 (图生图)
+            save_dir: 图片保存目录；未传入时按 session_id 保存
             **kwargs: 其他生成参数
 
         Returns:
@@ -176,7 +205,6 @@ class SeedreamClient:
             extra_body["style"] = kwargs["style"]
 
         # 处理参考图 (图生图)
-        image_urls = []
         if image_paths and len(image_paths) > 0:
             # 处理参考图：支持 URL 和本地文件
             ref_images = []
@@ -191,27 +219,23 @@ class SeedreamClient:
                     ext = os.path.splitext(p)[1].lower()
                     mime = "image/png" if ext == ".png" else "image/jpeg"
                     ref_images.append(f"data:{mime};base64,{img_data}")
+                else:
+                    logging.warning("Seedream 参考图不存在，已跳过: %s", p)
+            if not ref_images:
+                raise ValueError("Seedream 参考图均不可用，已取消图生图请求")
             extra_body["image"] = ref_images
 
         # 调用 API
-        if image_paths and len(image_paths) > 0:
-            # 图生图 - image 放在 extra_body 中
-            response = self.client.images.generate(
+        response = self._with_retry(
+            "图片生成",
+            lambda: self.client.images.generate(
                 model=model,
                 prompt=prompt,
                 size=f"{width}x{height}",
                 response_format="url",
                 extra_body=extra_body,
-            )
-        else:
-            # 文生图
-            response = self.client.images.generate(
-                model=model,
-                prompt=prompt,
-                size=f"{width}x{height}",
-                response_format="url",
-                extra_body=extra_body,
-            )
+            ),
+        )
 
         # 下载图片到本地
         generated_paths = []
@@ -219,34 +243,34 @@ class SeedreamClient:
             for idx, img_data in enumerate(response.data):
                 if img_data.url:
                     local_path = self._download_image(
-                        img_data.url, session_id, idx
+                        img_data.url, session_id, idx, save_dir=save_dir
                     )
                     if local_path:
                         generated_paths.append(local_path)
 
+        if not generated_paths:
+            raise RuntimeError("Seedream 图片生成成功但没有返回可保存的图片")
         return generated_paths
 
-    def _download_image(self, url: str, session_id: str, idx: int) -> Optional[str]:
+    def _download_image(self, url: str, session_id: str, idx: int, save_dir: Optional[str] = None) -> str:
         """从URL下载图片到本地"""
-        import requests
 
         # 构建存储路径
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        result_dir = os.path.join(base_dir, "code", "result", "image", str(session_id))
+        result_dir = save_dir or os.path.join(base_dir, "code", "result", "image", str(session_id))
         os.makedirs(result_dir, exist_ok=True)
 
         file_name = f"seedream_{int(time.time())}_{idx}.png"
         file_path = os.path.join(result_dir, file_name)
 
-        try:
+        def download():
             response = requests.get(url, timeout=self.timeout, proxies=Config.requests_proxies("ark"))
             response.raise_for_status()
             with open(file_path, "wb") as f:
                 f.write(response.content)
             return file_path
-        except Exception as e:
-            logging.error(f"Failed to download image from {url}: {e}")
-            return None
+
+        return self._with_retry("图片下载", download)
 
 
 if __name__ == "__main__":

@@ -6,14 +6,14 @@ backend_dir = os.path.dirname(models_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-import json
 import logging
 import time
 import uuid
-import dashscope
-from dashscope import MultiModalConversation
+
 from dashscope.aigc.image_generation import ImageGeneration
+
 from config import Config
+
 try:
     from models.image_processor import ImageProcessor
 except ImportError:
@@ -24,8 +24,6 @@ class DashScopeClient:
         self.api_key = api_key or Config.DASHSCOPE_API_KEY
         # 默认使用中国（北京）地域 API，如果参数或 config.yaml 未设置则使用默认地址
         self.base_url = base_url or Config.DASHSCOPE_BASE_URL
-        dashscope.api_key = self.api_key
-        dashscope.base_http_api_url = self.base_url
         self.image_processor = ImageProcessor()
 
     def generate_image(self, prompt, model="wan2.7-image", size="1024*1024", n=1, session_id=None, save_dir=None):
@@ -37,6 +35,7 @@ class DashScopeClient:
             response = ImageGeneration.call(
                 model=model,
                 api_key=self.api_key,
+                base_address=self.base_url,
                 messages=messages,
                 n=n,
                 size=size,
@@ -52,8 +51,11 @@ class DashScopeClient:
                             if 'message' in item and 'content' in item['message']:
                                 results.append(item['message']['content'][0]['image'])
                 except Exception as e:
-                    logging.error(f"Failed to parse ImageGeneration outputs: {e}")
+                    raise RuntimeError(f"万相图片结果解析失败: {e}") from e
                 
+                if not results:
+                    raise RuntimeError("万相图片生成成功但没有返回图片")
+
                 # Check if we should download
                 if save_dir:
                     os.makedirs(save_dir, exist_ok=True)
@@ -61,17 +63,19 @@ class DashScopeClient:
                     for i, url in enumerate(results):
                         file_name = f"ds_{session_id if session_id else 'nosess'}_{int(time.time())}_{i}_{uuid.uuid4().hex[:6]}.png"
                         file_path = os.path.join(save_dir, file_name)
-                        if self.image_processor.download_image(url, file_path, proxies=Config.requests_proxies("dashscope")):
-                            local_files.append(file_path)
+                        if not self.image_processor.download_image(url, file_path, proxies=Config.requests_proxies("dashscope")):
+                            raise RuntimeError(f"万相图片下载失败: {url}")
+                        local_files.append(file_path)
                     return local_files
                 
                 return results
             else:
-                logging.error(f"Image generation failed: {response.code}, {response.message}, status={response.status_code}")
-                return []
-        except Exception as e:
-            logging.error(f"Error in generate_image (DashScope): {e}")
-            return []
+                raise RuntimeError(
+                    f"万相图片生成失败: status={response.status_code}, code={response.code}, message={response.message}"
+                )
+        except Exception:
+            logging.exception("万相图片生成失败")
+            raise
 
     def edit_image(self, prompt, image_urls, model="wan2.7-image", size="1920*1080", n=1, session_id=None, save_dir=None):
         """
@@ -95,6 +99,7 @@ class DashScopeClient:
             response = ImageGeneration.call(
                 model=model,
                 api_key=self.api_key,
+                base_address=self.base_url,
                 messages=messages,
                 n=n,
                 size=size,
@@ -120,7 +125,10 @@ class DashScopeClient:
                                             if isinstance(c, dict) and 'image' in c:
                                                 results.append(c['image'])
                 except Exception as e:
-                    logging.error(f"Failed to parse ImageGeneration outputs: {e}")
+                    raise RuntimeError(f"万相图片结果解析失败: {e}") from e
+
+                if not results:
+                    raise RuntimeError("万相图片编辑成功但没有返回图片")
 
                 # Check if we should download
                 if save_dir:
@@ -129,17 +137,19 @@ class DashScopeClient:
                     for i, url in enumerate(results):
                         file_name = f"ds_{session_id if session_id else 'nosess'}_{int(time.time())}_{i}_{uuid.uuid4().hex[:6]}.png"
                         file_path = os.path.join(save_dir, file_name)
-                        if self.image_processor.download_image(url, file_path, proxies=Config.requests_proxies("dashscope")):
-                            local_files.append(file_path)
+                        if not self.image_processor.download_image(url, file_path, proxies=Config.requests_proxies("dashscope")):
+                            raise RuntimeError(f"万相图片下载失败: {url}")
+                        local_files.append(file_path)
                     return local_files
 
                 return results
             else:
-                logging.error(f"Image edit failed: {response.code}, {response.message}, status={response.status_code}")
-                return []
-        except Exception as e:
-            logging.error(f"Error in edit_image: {e}")
-            return []
+                raise RuntimeError(
+                    f"万相图片编辑失败: status={response.status_code}, code={response.code}, message={response.message}"
+                )
+        except Exception:
+            logging.exception("万相图片编辑失败")
+            raise
 
 
 if __name__ == "__main__":

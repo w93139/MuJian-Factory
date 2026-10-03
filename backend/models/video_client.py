@@ -15,6 +15,7 @@ if backend_dir not in sys.path:
 
 import logging
 from typing import Optional
+
 from config import Config
 from path_utils import absolute_path, media_reference_path
 
@@ -185,7 +186,7 @@ class VideoClient:
         model_lower = model.lower()
 
         if "kling" in model_lower:
-            return self._generate_kling(
+            result = self._generate_kling(
                 prompt,
                 image_path,
                 save_path,
@@ -199,7 +200,7 @@ class VideoClient:
                 negative_prompt or "",
             )
         elif "seedance" in model_lower:
-            return self._generate_seedance(
+            result = self._generate_seedance(
                 prompt,
                 image_path,
                 save_path,
@@ -212,7 +213,7 @@ class VideoClient:
                 generate_audio,
             )
         elif "wan" in model_lower or "happyhorse" in model_lower:
-            return self._generate_wan(
+            result = self._generate_wan(
                 prompt,
                 image_path,
                 save_path,
@@ -236,6 +237,9 @@ class VideoClient:
             )
         else:
             raise ValueError(f"未知的视频生成模型: {model}")
+        if not result:
+            raise RuntimeError(f"视频生成没有返回结果: model={model}")
+        return result
 
     @staticmethod
     def _normalize_seedance_resolution(resolution: Optional[str]) -> str:

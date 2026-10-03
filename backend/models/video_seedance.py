@@ -11,11 +11,13 @@ backend_dir = os.path.dirname(models_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-import time
-import logging
-import requests
 import base64
+import logging
+import time
 from typing import Optional
+
+import requests
+
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -112,13 +114,13 @@ class SeedanceVideoClient:
             "model": model,
             "content": content,
             "duration": duration,
-            "ratio": kwargs.get("ratio", "adaptive"),
-            "resolution": kwargs.get("resolution", "720p")
+            "ratio": kwargs.get("ratio") or "adaptive",
+            "resolution": kwargs.get("resolution") or "720p"
         }
 
         # 合并其他可选参数 (如 seed, watermark)
         for key in ["seed", "watermark", "generate_audio"]:
-            if key in kwargs:
+            if kwargs.get(key) is not None:
                 payload[key] = kwargs[key]
 
         logger.info(f"SeedanceVideoClient: 提交任务 model={model}, duration={duration}s")
@@ -158,12 +160,12 @@ class SeedanceVideoClient:
             status = data.get("status")
             if status == "succeeded":
                 # 根据实际返回体，URL 位于 content.video_url 或 video_url
-                video_url = data.get("content", {}).get("video_url") or data.get("video_url")
+                video_url = (data.get("content") or {}).get("video_url") or data.get("video_url")
                 if not video_url:
                     raise RuntimeError(f"Seedance 任务成功但未返回视频 URL: {data}")
                 return video_url
             elif status in ("failed", "expired"):
-                error_msg = data.get("error", {}).get("message") or data.get("status_msg") or "未知错误"
+                error_msg = (data.get("error") or {}).get("message") or data.get("status_msg") or "未知错误"
                 raise RuntimeError(f"Seedance 视频生成{status}: {error_msg}")
             
             logger.debug(f"SeedanceVideoClient: 任务进行中 {task_id}, status={status}, poll={i+1}")
