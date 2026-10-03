@@ -325,7 +325,8 @@ class DashscopeVideoClient:
             )
 
         logger.info("DashscopeVideoClient: 任务已提交 task_id=%s；等待生成完成...", task_id)
-        for poll in range(120):
+        max_polls = 360 if self._is_video_edit_model(model) else 120
+        for poll in range(max_polls):
             # SDK 的 fetch() 没有 base_address 参数；_get() 仅查询已提交的任务。
             # 网络重试严格限于查询，绝不重新执行 async_call。
             rsp = self._with_network_retry(
@@ -354,12 +355,12 @@ class DashscopeVideoClient:
                     f"万象视频任务失败: task_id={task_id}, task_status={task_status}, "
                     f"output={self._safe_output_repr(rsp)}"
                 )
-            if poll < 119:
+            if poll < max_polls - 1:
                 time.sleep(5)
         else:
             raise TimeoutError(f"万象视频任务超时: task_id={task_id}")
 
-        logger.info(f"DashscopeVideoClient: 视频生成成功: {video_url}")
+        logger.info("DashscopeVideoClient: 视频生成成功 task_id=%s", task_id)
 
         # 确保输出目录存在
         os.makedirs(os.path.dirname(save_path), exist_ok=True)

@@ -87,6 +87,10 @@ def split_script(text: str, split_mode: str = "paragraph") -> list[str]:
 
 
 def copy_input_file(path: str, output_dir: str, prefix: str) -> str:
+    # Session artifacts are stored as backend-relative paths for /code URLs.
+    # Resolve that form before applying the upload-directory allowlist.
+    if path.startswith(("code/result/", "temp/")):
+        path = absolute_path(path)
     resolved = resolve_media_reference(
         path,
         [settings.TEMP_DIR, settings.RESULT_DIR],

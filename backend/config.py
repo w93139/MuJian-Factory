@@ -58,8 +58,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "models": {
         "llm": "qwen3-max",
         "vlm": "qwen3.5-plus",
-        "image_it2i": "doubao-seedream-5-0-260128",
-        "image_t2i": "doubao-seedream-5-0-260128",
+        "image_it2i": "wan2.7-image",
+        "image_t2i": "wan2.7-image",
         "video_first_frame": "wan2.7-i2v",
         "video_start_end": "wan2.7-i2v",
         "video_reference": "wan2.7-r2v",

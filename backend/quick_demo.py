@@ -3,8 +3,8 @@
 from models.config_model import get_model_config
 
 FAST_VIDEO_MODELS = (
-    "doubao-seedance-2-0-fast-260128",
     "wan2.6-i2v-flash",
+    "doubao-seedance-2-0-fast-260128",
 )
 
 

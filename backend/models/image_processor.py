@@ -171,7 +171,7 @@ class ImageProcessor:
                     logger.info("Image downloaded: %s", save_path)
                     return True
                 else:
-                    logger.warning("Image download failed: status=%s url=%s", response.status_code, image_url)
+                    logger.warning("Image download failed: status=%s", response.status_code)
                     
             except requests.exceptions.SSLError as e:
                 logger.warning("Image download SSL error: attempt=%d/%d error=%s", attempt + 1, max_retries, str(e)[:100])

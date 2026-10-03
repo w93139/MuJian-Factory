@@ -7,6 +7,7 @@ from api.app import _cors_origins
 from api.routers.files import _safe_upload_name
 from config import SECRET_MASK, merge_config_update, redact_config
 from path_security import resolve_allowed_local_file, resolve_media_reference
+from pipelines.utils import copy_input_file
 
 
 class ConfigSecurityTests(unittest.TestCase):
@@ -49,6 +50,21 @@ class ConfigSecurityTests(unittest.TestCase):
 
 
 class PathSecurityTests(unittest.TestCase):
+    def test_pipeline_can_reuse_session_artifact_without_escaping_result_dir(self):
+        from config import settings
+
+        with tempfile.TemporaryDirectory(dir=settings.RESULT_DIR) as temp_dir:
+            source = Path(temp_dir) / "source.png"
+            source.write_bytes(b"image")
+            stored = source.relative_to(Path(settings.RESULT_DIR).parent.parent).as_posix()
+            output = Path(temp_dir) / "output"
+            output.mkdir()
+
+            copied = copy_input_file(stored, str(output), "input")
+            self.assertEqual(Path(copied).read_bytes(), b"image")
+            with self.assertRaises(ValueError):
+                copy_input_file("code/result/../../config.yaml", str(output), "private")
+
     def test_local_file_must_stay_under_allowed_root(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             parent = Path(temp_dir)

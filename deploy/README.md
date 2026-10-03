@@ -19,7 +19,7 @@ cp .env.example .env
 python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 ```
 
-把最后一条命令生成的随机值填入 `.env` 的 `MUJIAN_SESSION_SECRET`，另设一个强管理员密码。填写 `DASHSCOPE_API_KEY` 和 `ARK_API_KEY`，保留 `MUJIAN_PUBLIC_MODE=1`，先用 `MUJIAN_COOKIE_SECURE=0`。`.env` 只留在服务器上，不提交到 Git。
+把最后一条命令生成的随机值填入 `.env` 的 `MUJIAN_SESSION_SECRET`，另设一个强管理员密码。当前默认主流程使用百炼，须填写 `DASHSCOPE_API_KEY`；如需使用方舟模型，先在方舟控制台开通相应模型，再填写 `ARK_API_KEY`。保留 `MUJIAN_PUBLIC_MODE=1`，先用 `MUJIAN_COOKIE_SECURE=0`。`.env` 只留在服务器上，不提交到 Git。
 
 ```bash
 docker compose config --quiet

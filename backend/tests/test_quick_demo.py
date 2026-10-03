@@ -32,6 +32,7 @@ async def test_quick_demo_start_forces_one_short_episode_and_fast_video():
 @pytest.mark.asyncio
 async def test_video_model_list_exposes_quick_demo_recommendation():
     response = await pipelines.get_api_models(model_type="video")
+    assert response["quick_demo_video_model"] == "wan2.6-i2v-flash"
     assert response["quick_demo_video_model"] in {model["id"] for model in response["models"]}
 
 
