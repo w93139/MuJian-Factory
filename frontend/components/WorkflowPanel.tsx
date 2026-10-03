@@ -7,7 +7,6 @@ import {
   executeStage,
   parseStreamEvents,
   getProjectStatus,
-  getProjectStatusFromDisk,
   continueWorkflow,
   stopProject,
   intervene,
@@ -163,12 +162,7 @@ export default function WorkflowPanel() {
       await new Promise(r => setTimeout(r, 2000));
       if (!pollRef.current.has(key)) return;
       try {
-        let status: any;
-        try {
-          status = await getProjectStatus(sid);
-        } catch {
-          status = await getProjectStatusFromDisk(sid);
-        }
+        const status: any = await getProjectStatus(sid);
         if (!pollRef.current.has(key)) return;
         setGlobalStatusMap(status.status || {});
         const done = Object.keys(status.status || {}).filter(k => ["completed", "session_completed"].includes(status.status[k]));
@@ -537,7 +531,6 @@ export default function WorkflowPanel() {
         video_first_frame_model: params.video_first_frame_model,
         video_start_end_model: params.video_start_end_model,
         video_reference_model: params.video_reference_model,
-        video_model: params.video_model,
         enable_concurrency: params.enable_concurrency,
         web_search: params.web_search,
         expand_idea: params.expand_idea,
@@ -572,7 +565,6 @@ export default function WorkflowPanel() {
         video_first_frame_model: params.video_first_frame_model,
         video_start_end_model: params.video_start_end_model,
         video_reference_model: params.video_reference_model,
-        video_model: params.video_model,
         scene_number: result.params?.scene_number,
         expand_idea: params.expand_idea,
         enable_concurrency: params.enable_concurrency,
@@ -659,7 +651,6 @@ export default function WorkflowPanel() {
           video_first_frame_model: projectParams?.video_first_frame_model,
           video_start_end_model: projectParams?.video_start_end_model,
           video_reference_model: projectParams?.video_reference_model,
-          video_model: projectParams?.video_model,
           video_ratio: projectParams?.video_ratio,
           video_resolution: projectParams?.video_resolution,
           video_sound: 'on',
@@ -766,7 +757,6 @@ export default function WorkflowPanel() {
       video_first_frame_model: projectParams?.video_first_frame_model,
       video_start_end_model: projectParams?.video_start_end_model,
       video_reference_model: projectParams?.video_reference_model,
-      video_model: projectParams?.video_model,
       video_sound: 'on',
       video_shot_type: 'multi',
     };
@@ -1066,7 +1056,6 @@ export default function WorkflowPanel() {
         video_first_frame_model: projectParams?.video_first_frame_model,
         video_start_end_model: projectParams?.video_start_end_model,
         video_reference_model: projectParams?.video_reference_model,
-        video_model: projectParams?.video_model,
         video_ratio: projectParams?.video_ratio,
         video_resolution: projectParams?.video_resolution,
       };
@@ -1109,12 +1098,7 @@ export default function WorkflowPanel() {
     const stageParam = targetStage ? `&stage=${targetStage}` : '';
     router.push(`/?session=${sid}${stageParam}`);
     try {
-      let status: any;
-      try {
-        status = await getProjectStatus(sid);
-      } catch {
-        status = await getProjectStatusFromDisk(sid);
-      }
+      const status: any = await getProjectStatus(sid);
       setGlobalStatusMap(status.status || {});
       const newStates = initStageStates();
       const stMap = status.status || {};
@@ -1176,14 +1160,10 @@ export default function WorkflowPanel() {
         try {
           defaultModels = (await fetchAppConfig()).config?.models || {};
         } catch { /* 会话内已有模型时仍可恢复 */ }
-        // Legacy session compatibility: old sessions only stored one video_model, so hydrate it as the first-frame model.
-        const restoredFirstFrameVideoModel = s.video_first_frame_model || s.video_model || defaultModels.video_first_frame || '';
+        const restoredFirstFrameVideoModel = s.video_first_frame_model || defaultModels.video_first_frame || '';
         const restoredStartEndModel = s.video_start_end_model || defaultModels.video_start_end || '';
         const restoredReferenceModel = s.video_reference_model || defaultModels.video_reference || '';
         const restoredVideoMode = s.video_generation_mode || 'first_frame';
-        const restoredActiveModel = restoredVideoMode === 'start_end_frame'
-          ? restoredStartEndModel
-          : restoredVideoMode === 'reference' ? restoredReferenceModel : restoredFirstFrameVideoModel;
         setProjectParams({
           idea: s.idea || s.user_textbox_input || '',
           style: s.style || '',
@@ -1197,7 +1177,6 @@ export default function WorkflowPanel() {
           video_first_frame_model: restoredFirstFrameVideoModel,
           video_start_end_model: restoredStartEndModel,
           video_reference_model: restoredReferenceModel,
-          video_model: s.video_model || restoredActiveModel,
           expand_idea: s.expand_idea || false,
           enable_concurrency: s.enable_concurrency || false,
           web_search: s.web_search || false,
@@ -1260,12 +1239,10 @@ export default function WorkflowPanel() {
         vlm_model: projectParams.vlm_model,
         image_t2i_model: projectParams.image_t2i_model,
         image_it2i_model: projectParams.image_it2i_model,
-        // Legacy session compatibility: projectParams may come from an old session with only video_model.
         video_generation_mode: projectParams.video_generation_mode || 'first_frame',
-        video_first_frame_model: projectParams.video_first_frame_model || projectParams.video_model,
+        video_first_frame_model: projectParams.video_first_frame_model,
         video_start_end_model: projectParams.video_start_end_model,
         video_reference_model: projectParams.video_reference_model,
-        video_model: projectParams.video_model,
         video_ratio: projectParams.video_ratio,
         video_resolution: projectParams.video_resolution || '720P',
         enable_concurrency: projectParams.enable_concurrency || false,

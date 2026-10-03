@@ -26,7 +26,6 @@ export interface ProjectParams {
   vlm_model: string;
   image_t2i_model: string;
   image_it2i_model: string;
-  video_model: string;
   video_first_frame_model: string;
   video_start_end_model: string;
   video_reference_model: string;
@@ -237,7 +236,6 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
       video_first_frame_model: selectedFirstFrameVideo,
       video_start_end_model: selectedStartEndVideo,
       video_reference_model: selectedReferenceVideo,
-      video_model: activeVideoModel,
       enable_concurrency: enableConcurrency,
       web_search: webSearch,
       episodes,

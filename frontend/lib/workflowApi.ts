@@ -305,7 +305,6 @@ export async function startProject(params: {
   vlm_model?: string;
   image_t2i_model?: string;
   image_it2i_model?: string;
-  video_model?: string;
   video_first_frame_model?: string;
   video_start_end_model?: string;
   video_reference_model?: string;
@@ -331,13 +330,6 @@ export async function startProject(params: {
 export async function getProjectStatus(sessionId: string): Promise<ProjectStatus> {
   const resp = await fetch(`/api/project/${sessionId}/status`);
   if (!resp.ok) throw new Error('Failed to get project status');
-  return resp.json();
-}
-
-// 兼容旧路由名；后端实际会通过统一的 workflow state 入口返回状态。
-export async function getProjectStatusFromDisk(sessionId: string): Promise<any> {
-  const resp = await fetch(`/api/project/${sessionId}/status/from_disk`);
-  if (!resp.ok) throw new Error('Failed to get project status snapshot');
   return resp.json();
 }
 

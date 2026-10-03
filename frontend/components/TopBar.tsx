@@ -30,7 +30,6 @@ export interface ModelConfig {
   vlm_model: string;
   image_t2i_model: string;
   image_it2i_model: string;
-  video_model: string;
   video_first_frame_model: string;
   video_start_end_model: string;
   video_reference_model: string;
@@ -161,22 +160,16 @@ function ModelSelector({
   const activeVideoLabel = VIDEO_GENERATION_MODES.find(item => item.id === config.video_generation_mode)?.label || '首帧生视频';
 
   const updateVideoMode = (mode: VideoGenerationMode) => {
-    const nextModel =
-      mode === 'start_end_frame'
-        ? config.video_start_end_model
-        : mode === 'reference'
-          ? config.video_reference_model
-          : config.video_first_frame_model;
-    onChange({ ...config, video_generation_mode: mode, video_model: nextModel });
+    onChange({ ...config, video_generation_mode: mode });
   };
 
   const updateActiveVideoModel = (model: string) => {
     if (config.video_generation_mode === 'start_end_frame') {
-      onChange({ ...config, video_start_end_model: model, video_model: model });
+      onChange({ ...config, video_start_end_model: model });
     } else if (config.video_generation_mode === 'reference') {
-      onChange({ ...config, video_reference_model: model, video_model: model });
+      onChange({ ...config, video_reference_model: model });
     } else {
-      onChange({ ...config, video_first_frame_model: model, video_model: model });
+      onChange({ ...config, video_first_frame_model: model });
     }
   };
 
