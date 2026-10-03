@@ -447,7 +447,7 @@ export default function SandboxPage() {
     setToggling(record.id);
     try {
       await setSandboxRecordShowcase(record.id, !record.showcase);
-      setHistory(previous => previous.map(item => item.id === record.id ? { ...item, showcase: !record.showcase } : item));
+      await fetchHistory();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '更新示例状态失败');
     } finally {

@@ -6,6 +6,8 @@
  * Production streams use the same origin so signed cookies reach Nginx and the API.
  * A separate URL can be configured for local development when needed.
  */
+import { apiFetch } from '@/lib/authApi';
+
 const STREAM_API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
 export interface StageInfo {
@@ -102,13 +104,13 @@ export type AppConfigValues = Record<string, unknown> & {
 };
 
 export async function fetchAppConfig(): Promise<{ config: AppConfigValues; path?: string }> {
-  const response = await fetch('/api/config');
+  const response = await apiFetch('/api/config');
   if (!response.ok) throw new Error('读取配置失败');
   return response.json();
 }
 
 export async function saveAppConfig(values: Record<string, unknown>): Promise<{ config: AppConfigValues; path?: string }> {
-  const response = await fetch('/api/config', {
+  const response = await apiFetch('/api/config', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
@@ -143,21 +145,21 @@ async function requireOkResponse(response: Response, fallbackMessage: string): P
 }
 
 export async function fetchStages(): Promise<StageInfo[]> {
-  const resp = await fetch('/api/stages');
+  const resp = await apiFetch('/api/stages');
   await requireOkResponse(resp, '获取工作流阶段失败');
   const data = await resp.json();
   return data.stages;
 }
 
 export async function fetchSessions(): Promise<any[]> {
-  const resp = await fetch('/api/sessions');
+  const resp = await apiFetch('/api/sessions');
   await requireOkResponse(resp, '获取会话列表失败');
   const data = await resp.json();
   return data.sessions || [];
 }
 
 async function postPipelineTask(path: string, params: Record<string, any>): Promise<PipelineStartResponse> {
-  const resp = await fetch(path, {
+  const resp = await apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -182,20 +184,20 @@ export async function startDigitalHumanPipeline(params: Record<string, any>): Pr
 }
 
 export async function fetchPipelineTasks(limit = 100): Promise<PipelineTask[]> {
-  const resp = await fetch(`/api/tasks?limit=${limit}`);
+  const resp = await apiFetch(`/api/tasks?limit=${limit}`);
   if (!resp.ok) throw new Error('获取任务历史失败');
   const data = await resp.json();
   return data.tasks || [];
 }
 
 export async function fetchPipelineTask(taskId: string): Promise<PipelineTask> {
-  const resp = await fetch(`/api/tasks/${taskId}`);
+  const resp = await apiFetch(`/api/tasks/${taskId}`);
   if (!resp.ok) throw new Error('获取任务状态失败');
   return resp.json();
 }
 
 export async function setPipelineTaskShowcase(taskId: string, showcase: boolean): Promise<void> {
-  const response = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
+  const response = await apiFetch(`/api/tasks/${encodeURIComponent(taskId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ showcase }),
@@ -204,21 +206,21 @@ export async function setPipelineTaskShowcase(taskId: string, showcase: boolean)
 }
 
 export async function fetchSandboxTasks(): Promise<SandboxTask[]> {
-  const resp = await fetch('/api/sandbox/tasks');
+  const resp = await apiFetch('/api/sandbox/tasks');
   if (!resp.ok) return [];
   const data = await resp.json();
   return data.tasks || [];
 }
 
 export async function fetchSandboxHistory(): Promise<Array<Record<string, unknown>>> {
-  const response = await fetch('/api/sandbox/history');
+  const response = await apiFetch('/api/sandbox/history');
   await requireOkResponse(response, '历史记录加载失败');
   const data = await response.json();
   return data.records || [];
 }
 
 export async function setSandboxRecordShowcase(recordId: string, showcase: boolean): Promise<void> {
-  const response = await fetch(`/api/sandbox/history/${encodeURIComponent(recordId)}`, {
+  const response = await apiFetch(`/api/sandbox/history/${encodeURIComponent(recordId)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ showcase }),
@@ -227,7 +229,7 @@ export async function setSandboxRecordShowcase(recordId: string, showcase: boole
 }
 
 export async function clearTempCache(): Promise<{ status: string; deleted: number; freed_bytes?: number; freed_mb?: number; errors?: Array<{ path: string; error: string }> }> {
-  const resp = await fetch('/api/cache/temp', { method: 'DELETE' });
+  const resp = await apiFetch('/api/cache/temp', { method: 'DELETE' });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: '清空缓存失败' }));
     throw new Error(err.detail || '清空缓存失败');
@@ -236,7 +238,7 @@ export async function clearTempCache(): Promise<{ status: string; deleted: numbe
 }
 
 export async function deletePipelineTask(taskId: string): Promise<void> {
-  const resp = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+  const resp = await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
   if (!resp.ok) throw new Error('删除任务失败');
 }
 
@@ -251,14 +253,14 @@ export async function fetchApiModels(params: {
   if (params.modelType) search.set('model_type', params.modelType);
   if (params.ability) search.set('ability', params.ability);
   if (params.verifiedOnly) search.set('verified_only', 'true');
-  const resp = await fetch(`/api/models${search.toString() ? `?${search.toString()}` : ''}`);
+  const resp = await apiFetch(`/api/models${search.toString() ? `?${search.toString()}` : ''}`);
   if (!resp.ok) throw new Error('获取模型列表失败');
   const data = await resp.json();
   return data.models || [];
 }
 
 export async function fetchQuickDemoVideoModel(): Promise<string> {
-  const response = await fetch('/api/models?model_type=video');
+  const response = await apiFetch('/api/models?model_type=video');
   await requireOkResponse(response, '读取快速演示模型失败');
   const data = await response.json();
   if (typeof data.quick_demo_video_model !== 'string' || !data.quick_demo_video_model) {
@@ -268,7 +270,7 @@ export async function fetchQuickDemoVideoModel(): Promise<string> {
 }
 
 export async function fetchStandardTemplates(): Promise<StandardTemplateOption[]> {
-  const resp = await fetch('/api/pipelines/standard/templates');
+  const resp = await apiFetch('/api/pipelines/standard/templates');
   if (!resp.ok) throw new Error('获取模版列表失败');
   const data = await resp.json();
   return data.templates || [];
@@ -277,7 +279,7 @@ export async function fetchStandardTemplates(): Promise<StandardTemplateOption[]
 export async function uploadMedia(file: File): Promise<{ filename: string; file_path: string }> {
   const formData = new FormData();
   formData.append('file', file);
-  const resp = await fetch('/api/upload_media', {
+  const resp = await apiFetch('/api/upload_media', {
     method: 'POST',
     body: formData,
   });
@@ -291,7 +293,7 @@ export async function uploadMedia(file: File): Promise<{ filename: string; file_
 export async function uploadProjectFile(file: File): Promise<{ file_path?: string }> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch('/api/upload_file', { method: 'POST', body: formData });
+  const response = await apiFetch('/api/upload_file', { method: 'POST', body: formData });
   if (!response.ok) throw new Error('文件上传失败');
   return response.json();
 }
@@ -301,7 +303,7 @@ export async function patchStageArtifact(
   stage: 'reference_generation' | 'video_generation',
   values: Record<string, unknown>,
 ): Promise<boolean> {
-  const response = await fetch(`/api/project/${sessionId}/artifact/${stage}`, {
+  const response = await apiFetch(`/api/project/${sessionId}/artifact/${stage}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(values),
@@ -326,15 +328,15 @@ async function readSandboxJsonResponse<T>(response: Response): Promise<T> {
 }
 
 export async function fetchSandboxHistoryResult<T>(): Promise<T> {
-  return readSandboxJsonResponse<T>(await fetch('/api/sandbox/history'));
+  return readSandboxJsonResponse<T>(await apiFetch('/api/sandbox/history'));
 }
 
 export async function deleteSandboxHistoryRecord<T>(id: string): Promise<T> {
-  return readSandboxJsonResponse<T>(await fetch(`/api/sandbox/history/${id}`, { method: 'DELETE' }));
+  return readSandboxJsonResponse<T>(await apiFetch(`/api/sandbox/history/${id}`, { method: 'DELETE' }));
 }
 
 export async function runSandboxTool<T>(tool: SandboxTool, body: Record<string, unknown>): Promise<T> {
-  const response = await fetch(`/api/sandbox/${tool}`, {
+  const response = await apiFetch(`/api/sandbox/${tool}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -353,7 +355,7 @@ export async function uploadArtifactImage(
   formData.append('item_type', itemType);
   formData.append('item_id', itemId);
   formData.append('file', file);
-  const resp = await fetch(`/api/project/${sessionId}/artifact/${stage}/upload_image`, {
+  const resp = await apiFetch(`/api/project/${sessionId}/artifact/${stage}/upload_image`, {
     method: 'POST',
     body: formData,
   });
@@ -405,7 +407,7 @@ export async function startProject(params: {
   episodes?: number;
   target_duration_seconds?: number;
 }): Promise<{ session_id: string; status: string; params: any }> {
-  const resp = await fetch('/api/project/start', {
+  const resp = await apiFetch('/api/project/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -418,13 +420,13 @@ export async function startProject(params: {
 }
 
 export async function getProjectStatus(sessionId: string): Promise<ProjectStatus> {
-  const resp = await fetch(`/api/project/${sessionId}/status`);
+  const resp = await apiFetch(`/api/project/${sessionId}/status`);
   if (!resp.ok) throw new Error('Failed to get project status');
   return resp.json();
 }
 
 export async function getArtifact(sessionId: string, stage: string): Promise<any> {
-  const resp = await fetch(`/api/project/${sessionId}/artifact/${stage}`);
+  const resp = await apiFetch(`/api/project/${sessionId}/artifact/${stage}`);
   if (!resp.ok) throw new Error(`Artifact for stage '${stage}' not found`);
   return resp.json();
 }
@@ -435,7 +437,7 @@ export async function checkSceneAssets(sessionId: string, sceneNumber: number): 
   videos: number;
   shot_count: number;
 }> {
-  const resp = await fetch(`/api/project/${sessionId}/scene/${sceneNumber}/assets`);
+  const resp = await apiFetch(`/api/project/${sessionId}/scene/${sceneNumber}/assets`);
   if (!resp.ok) return { scene_number: sceneNumber, reference_images: 0, videos: 0, shot_count: 0 };
   return resp.json();
 }
@@ -446,7 +448,7 @@ export async function executeStage(
   inputData: Record<string, any> = {},
   signal?: AbortSignal,
 ): Promise<Response> {
-  const response = await fetch(`${STREAM_API_BASE}/api/project/${sessionId}/execute/${stage}`, {
+  const response = await apiFetch(`${STREAM_API_BASE}/api/project/${sessionId}/execute/${stage}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(inputData),
@@ -461,7 +463,7 @@ export async function intervene(
   modifications: Record<string, any>,
 ): Promise<Response> {
   // Use STREAM_API_BASE to bypass Next.js proxy (SSE endpoint)
-  const response = await fetch(`${STREAM_API_BASE}/api/project/${sessionId}/intervene`, {
+  const response = await apiFetch(`${STREAM_API_BASE}/api/project/${sessionId}/intervene`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ stage, modifications }),
@@ -470,7 +472,7 @@ export async function intervene(
 }
 
 export async function stopProject(sessionId: string): Promise<{ status: string }> {
-  const resp = await fetch(`/api/project/${sessionId}/stop`, {
+  const resp = await apiFetch(`/api/project/${sessionId}/stop`, {
     method: 'POST',
   });
   await requireOkResponse(resp, '停止项目失败');
@@ -481,7 +483,7 @@ export async function updateModels(
   sessionId: string,
   models: Partial<Record<string, string | boolean>>,
 ): Promise<{ status: string }> {
-  const resp = await fetch(`/api/project/${sessionId}/models`, {
+  const resp = await apiFetch(`/api/project/${sessionId}/models`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(models),
@@ -493,7 +495,7 @@ export async function updateModels(
 export async function deleteSession(
   sessionId: string,
 ): Promise<{ status: string }> {
-  const resp = await fetch(`/api/sessions/${sessionId}`, {
+  const resp = await apiFetch(`/api/sessions/${sessionId}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
   });
@@ -509,7 +511,7 @@ export async function saveSelections(
   stage: string,
   selections: Record<string, any>,
 ): Promise<{ status: string }> {
-  const resp = await fetch(`/api/project/${sessionId}/artifact/${stage}`, {
+  const resp = await apiFetch(`/api/project/${sessionId}/artifact/${stage}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(selections),
@@ -519,7 +521,7 @@ export async function saveSelections(
 }
 
 export async function continueWorkflow(sessionId: string): Promise<{ status: string; next_stage?: string }> {
-  const resp = await fetch(`/api/project/${sessionId}/continue`, {
+  const resp = await apiFetch(`/api/project/${sessionId}/continue`, {
     method: 'POST',
   });
   await requireOkResponse(resp, '继续工作流失败');

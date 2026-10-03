@@ -7,6 +7,7 @@ import clsx from 'clsx';
 import { useEffect, useState, type CSSProperties } from 'react';
 import { clearTempCache, fetchPipelineTasks, fetchSandboxTasks, fetchSessions, type PipelineTask, type SandboxTask } from '@/lib/workflowApi';
 import { useAuth } from '@/components/AuthProvider';
+import { redirectForAnonymous } from '@/lib/authApi';
 
 const NAV_ITEMS = [
   { href: '/', label: '幕间', icon: Home },
@@ -318,9 +319,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authLoading && !authError && public_mode && role === 'anonymous' && pathname !== '/login') {
-      router.replace('/login');
+      redirectForAnonymous();
     }
-  }, [authLoading, authError, public_mode, role, pathname, router]);
+  }, [authLoading, authError, public_mode, role, pathname]);
 
   const setSidebarOpen = (nextOpen: boolean) => {
     setOpen(nextOpen);

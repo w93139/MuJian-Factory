@@ -5,6 +5,20 @@ export interface AuthSession {
   public_mode: boolean;
 }
 
+const AUTH_MARKER = 'mujian_authenticated_role';
+
+export function redirectForAnonymous() {
+  if (typeof window === 'undefined' || window.location.pathname === '/login') return;
+  const expired = window.sessionStorage.getItem(AUTH_MARKER) === 'guest';
+  window.location.replace(expired ? '/login?expired=1' : '/login');
+}
+
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, { credentials: 'same-origin', ...init });
+  if (response.status === 401) redirectForAnonymous();
+  return response;
+}
+
 async function authRequest(path: string, options?: RequestInit) {
   const response = await fetch(path, { credentials: 'same-origin', ...options });
   if (!response.ok) {
@@ -24,16 +38,19 @@ export async function loginWithPassword(password: string) {
   await authRequest('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password }),
   });
+  window.sessionStorage.setItem(AUTH_MARKER, 'admin');
 }
 
 export async function loginWithInvite(invite_code: string) {
   await authRequest('/api/auth/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ invite_code }),
   });
+  window.sessionStorage.setItem(AUTH_MARKER, 'guest');
 }
 
 export async function logoutSession() {
   await authRequest('/api/auth/logout', { method: 'POST' });
+  window.sessionStorage.removeItem(AUTH_MARKER);
 }
 
 export interface InviteCode {

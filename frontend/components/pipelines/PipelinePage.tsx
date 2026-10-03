@@ -608,7 +608,7 @@ function PipelineHistory({
     setShowcaseError('');
     try {
       await setPipelineTaskShowcase(task.task_id, !task.showcase);
-      setTasks(previous => previous.map(item => item.task_id === task.task_id ? { ...item, showcase: !task.showcase } : item));
+      await load();
     } catch (cause) {
       setShowcaseError(cause instanceof Error ? cause.message : '更新示例状态失败');
     } finally {

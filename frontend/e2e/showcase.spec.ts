@@ -105,3 +105,55 @@ test('示例媒体由已登录会话读取', async ({ page }) => {
   expect(video.status()).toBe(200);
   expect(video.headers()['content-type']).toContain('video/mp4');
 });
+
+test('管理员创建邀请码和示例后，面试官仅能浏览示例；作废后返回登录', async ({ browser }) => {
+  const admin = await browser.newPage();
+  const guest = await browser.newPage();
+  try {
+    await admin.goto('/login');
+    await admin.getByRole('button', { name: '管理员登录' }).click();
+    await admin.getByRole('textbox', { name: '管理员密码' }).fill('e2e-admin-password');
+    await admin.getByRole('button', { name: '进入幕间' }).click();
+    await expect(admin).toHaveURL('/');
+    await admin.goto('/settings');
+    await admin.getByPlaceholder('备注，例如某公司面试').fill('闭环验收');
+    await admin.getByRole('button', { name: '生成邀请码' }).click();
+    const inviteRow = admin.locator('div.rounded-lg').filter({ hasText: '闭环验收' });
+    const inviteCode = await inviteRow.locator('code').first().innerText();
+    expect(inviteCode).toMatch(/^[A-Z2-9]{8}$/);
+
+    await admin.goto('/pipelines/standard');
+    const taskCard = admin.locator('div.group').filter({ hasText: '待设为示例的任务' });
+    await taskCard.getByRole('button', { name: '设为示例' }).click();
+    await expect(taskCard.getByRole('button', { name: '取消示例' })).toBeVisible();
+
+    await guest.goto(`/login?code=${inviteCode}`);
+    await expect(guest).toHaveURL('/');
+    await expect(guest.getByRole('button', { name: demoTitle })).toBeVisible();
+    await expect(guest.getByText('私有草稿')).toHaveCount(0);
+    await guest.goto('/pipelines/standard');
+    await expect(guest.locator('main').getByText('公开流水线示例')).toBeVisible();
+    await expect(guest.locator('main').getByText('待设为示例的任务')).toBeVisible();
+    await expect(guest.getByText('私有流水线草稿')).toHaveCount(0);
+    await expect(guest.getByRole('button', { name: /^(设为示例|取消示例)$/ })).toHaveCount(0);
+    await guest.goto('/sandbox');
+    await expect(guest.getByText('公开沙盒示例')).toBeVisible();
+    await expect(guest.getByText('私有沙盒草稿')).toHaveCount(0);
+
+    expect((await guest.request.get('/code/result/task/e2e-public-task/final.mp4')).status()).toBe(200);
+    expect((await guest.request.get('/code/result/task/e2e-promote-task/final.mp4')).status()).toBe(200);
+    expect((await guest.request.get('/code/result/task/e2e-private-task/final.mp4')).status()).toBe(404);
+    expect((await guest.request.get('/code/result/sandbox/e2e-private-record.png')).status()).toBe(404);
+    expect((await guest.request.get('/code/result/%2e%2e/data/invites.json')).status()).toBe(404);
+    expect((await guest.request.post('/api/project/start', { data: {} })).status()).toBe(403);
+
+    await admin.goto('/settings');
+    await admin.locator('div.rounded-lg').filter({ hasText: inviteCode }).getByRole('button', { name: '作废' }).click();
+    await guest.reload();
+    await expect(guest).toHaveURL(/\/login\?expired=1/);
+    await expect(guest.getByText('邀请码已失效或已过期，请重新登录。')).toBeVisible();
+  } finally {
+    await admin.close();
+    await guest.close();
+  }
+});

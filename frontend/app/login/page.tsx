@@ -10,6 +10,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const { loading: authLoading, role, public_mode, refresh } = useAuth();
   const linkCode = searchParams.get('code') || '';
+  const expired = searchParams.get('expired') === '1';
   const [mode, setMode] = useState<'guest' | 'admin'>('guest');
   const [code, setCode] = useState(linkCode);
   const [password, setPassword] = useState('');
@@ -60,6 +61,7 @@ function LoginForm() {
             className={`rounded-lg px-2 py-2 ${mode === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>管理员登录</button>
         </div>
         <form onSubmit={submit} className="space-y-4">
+          {expired && !error && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-700">邀请码已失效或已过期，请重新登录。</p>}
           <label className="block text-sm text-gray-600">
             {mode === 'guest' ? '邀请码' : '管理员密码'}
             <input autoFocus type={mode === 'guest' ? 'text' : 'password'} required
