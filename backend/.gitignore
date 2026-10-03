@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.env
+config.yaml
+.venv
+venv/
+code/
+code.bak/
+temp/
+logs/
+.DS_Store
+note.md
+.tools/
+.local-runtime/

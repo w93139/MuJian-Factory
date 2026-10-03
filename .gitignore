@@ -1,0 +1,32 @@
+.DS_Store
+
+# Local credentials and configuration
+**/config.yaml
+**/config.yaml.bak
+**/.env
+**/.env.*
+!**/.env.example
+**/env.txt
+
+# Dependencies and generated files
+**/.venv/
+**/venv/
+**/node_modules/
+**/.next/
+**/__pycache__/
+*.pyc
+**/.pytest_cache/
+**/.ruff_cache/
+**/.local-runtime/
+**/.tools/
+**/temp/
+**/code/data/
+**/code/result/
+dev/
+
+# Private execution notes; AGENTS.md is added after its Phase 8 rewrite
+AGENTS.md
+docs/codex/
+
+# Source copy; frontend/public and frontend/app contain the shipped logo
+/logo.png
