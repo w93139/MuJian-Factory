@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
@@ -8,17 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _backend_dir not in sys.path:
-    sys.path.insert(0, _backend_dir)
-
 from api.logging_config import setup_concurrent_logging
-from config import settings
-
-setup_concurrent_logging()
-
-logger = logging.getLogger(__name__)
-
 from api.routers import (
     configuration_router,
     files_router,
@@ -29,6 +18,11 @@ from api.routers import (
     stages_router,
     workflow_router,
 )
+from config import settings
+
+setup_concurrent_logging()
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CORS_ORIGINS = ["http://127.0.0.1:3000", "http://localhost:3000"]
 

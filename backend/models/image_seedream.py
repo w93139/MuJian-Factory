@@ -3,15 +3,8 @@ Seedream 图像生成 API 客户端
 字节跳动 ARK - doubao-seedream-5-0-260128 模型
 """
 
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
 import logging
+import os
 import time
 from typing import Dict, List, Optional
 
@@ -275,7 +268,7 @@ class SeedreamClient:
 
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     from config import Config
 
     print("=== Seedream 可用性测试 ===")
@@ -284,7 +277,6 @@ if __name__ == "__main__":
     if not api_key:
         print("✗ ARK_API_KEY 未设置，跳过")
         sys.exit(1)
-    print(f"  API Key: {api_key[:6]}***{api_key[-4:]}")
     print(f"  Base URL: {base_url}")
 
     client = SeedreamClient(api_key=api_key, base_url=base_url)

@@ -17,8 +17,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 from config import BASE_DIR, settings
 from media_tools import find_media_tool
-from path_utils import absolute_path
 from path_security import resolve_media_reference
+from path_utils import absolute_path
 
 logger = logging.getLogger(__name__)
 
@@ -280,8 +280,6 @@ def render_static_text_image(
 
     if title:
         title_lines = _wrap_text(draw, title, title_font, max_text_width)
-        title_line_height = max(1, draw.textbbox((0, 0), "国", font=title_font)[3])
-        title_height = len(title_lines) * title_line_height + max(0, len(title_lines) - 1) * 10
         title_y = max(48, int(height * 0.055))
         _draw_centered_lines(
             draw,

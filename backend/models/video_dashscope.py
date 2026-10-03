@@ -4,15 +4,8 @@
 支持 wan2.7-i2v, wan2.6-i2v-flash 等模型的图生视频功能
 """
 
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
 import logging
+import os
 import time
 from http import HTTPStatus
 from typing import Optional
@@ -531,7 +524,7 @@ class DashscopeVideoClient:
 if __name__ == "__main__":
     import sys
     import time
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     from config import Config
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -559,7 +552,6 @@ if __name__ == "__main__":
     for model in MODELS:
         output_path = os.path.join(OUTPUT_DIR, f"{model}.mp4")
         print(f"\n测试模型: {model}")
-        print(f"  API Key    : {ak[:6]}***{ak[-4:]}")
         print(f"  Base URL   : {base_url}")
         print(f"  输入图片   : {IMAGE_PATH}")
         print(f"  输出路径   : {output_path}")

@@ -2,8 +2,8 @@ import base64
 import os
 import re
 from html import escape
-from urllib.parse import quote
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from fastapi.responses import HTMLResponse, StreamingResponse

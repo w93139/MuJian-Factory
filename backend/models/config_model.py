@@ -4,14 +4,6 @@ All backend model metadata is registered in this file, including provider,
 model type, concurrency, pricing, and API capability tags.
 """
 
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
 import logging
 from copy import deepcopy
 from typing import Any, Optional

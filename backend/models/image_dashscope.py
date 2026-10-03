@@ -1,23 +1,13 @@
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
 import logging
+import os
 import time
 import uuid
 
 from dashscope.aigc.image_generation import ImageGeneration
 
 from config import Config
+from models.image_processor import ImageProcessor
 
-try:
-    from models.image_processor import ImageProcessor
-except ImportError:
-    from image_processor import ImageProcessor
 
 class DashScopeClient:
     def __init__(self, api_key=None, base_url=None):
@@ -154,7 +144,7 @@ class DashScopeClient:
 
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     from config import Config
 
     print("=== DashScope 图片生成可用性测试 ===")
@@ -165,7 +155,6 @@ if __name__ == "__main__":
     if not api_key:
         print("✗ DASHSCOPE_API_KEY 未设置，跳过")
         sys.exit(1)
-    print(f"  API Key: {api_key[:6]}***{api_key[-4:]}")
     print(f"  Base URL: {base_url}")
     client = DashScopeClient(api_key=api_key, base_url=base_url)
 

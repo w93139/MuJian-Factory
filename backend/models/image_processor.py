@@ -1,17 +1,12 @@
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
-import requests
-import numpy as np
-from pathlib import Path
-from datetime import datetime, timedelta
-from PIL import Image
 import logging
+import os
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
+import requests
+from PIL import Image
+
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -150,6 +145,7 @@ class ImageProcessor:
             max_retries: 最大重试次数
         """
         import time
+
         import urllib3
         
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

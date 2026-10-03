@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from config import settings
+
 from .events import publish_task_event
 
 logger = logging.getLogger(__name__)

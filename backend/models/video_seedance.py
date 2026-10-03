@@ -3,16 +3,9 @@ Seedance 视频生成 API 客户端 (字节跳动 ARK)
 
 """
 
-import os
-import sys
-
-models_dir = os.path.dirname(os.path.abspath(__file__))
-backend_dir = os.path.dirname(models_dir)
-if backend_dir not in sys.path:
-    sys.path.insert(0, backend_dir)
-
 import base64
 import logging
+import os
 import time
 from typing import Optional
 
@@ -185,7 +178,7 @@ class SeedanceVideoClient:
 
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
     from config import Config
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -211,7 +204,6 @@ if __name__ == "__main__":
         print(f"✗ 输入图片不存在: {IMAGE_PATH}")
         sys.exit(1)
 
-    print(f"  API Key    : {api_key[:6]}***{api_key[-4:]}")
     print(f"  Base URL   : {base_url}")
 
     for model in MODELS:

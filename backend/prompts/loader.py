@@ -5,7 +5,6 @@
 """
 
 import os
-from typing import Optional
 
 # 获取 prompts 目录的绝对路径 (loader.py is in backend/prompts/, prompts are in backend/prompts/)
 PROMPTS_DIR = os.path.dirname(os.path.abspath(__file__))

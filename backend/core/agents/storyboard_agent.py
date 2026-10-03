@@ -8,7 +8,6 @@
 import asyncio
 import json
 import logging
-import os
 import re
 import threading
 from datetime import datetime
@@ -1188,19 +1187,22 @@ class StoryboardAgent(AgentInterface):
         """验证嵌套的 Episode -> Segment -> Shots 结构"""
         valid_episodes = []
         for ep in episodes:
-            if not isinstance(ep, dict): continue
+            if not isinstance(ep, dict):
+                continue
             
             segments = ep.get("segments", [])
             valid_segments = []
             for idx, seg in enumerate(segments, 1):
-                if not isinstance(seg, dict): continue
+                if not isinstance(seg, dict):
+                    continue
                 
                 shots = seg.get("shots", [])
                 valid_shots = []
                 calc_total_duration = 0
                 
                 for s in shots:
-                    if not isinstance(s, dict): continue
+                    if not isinstance(s, dict):
+                        continue
                     dur = s.get("duration", 5)
                     calc_total_duration += dur
                     valid_shots.append({
@@ -1232,7 +1234,8 @@ class StoryboardAgent(AgentInterface):
     async def process(self, input_data: Any, intervention: Optional[Dict] = None) -> Dict:
         input_data = self._merge_session_params(input_data)
         sid = input_data.get("session_id")
-        if not sid: raise Exception("Missing session_id")
+        if not sid:
+            raise Exception("Missing session_id")
         artifacts = self._session_artifacts(input_data)
         session_meta = self._session_meta(input_data)
             
@@ -1244,7 +1247,8 @@ class StoryboardAgent(AgentInterface):
         # 处理人工干预/修改
         if intervention and "modified_storyboard" in intervention:
             modified_episodes = intervention["modified_storyboard"]
-            if isinstance(modified_episodes, str): modified_episodes = extract_json(modified_episodes)
+            if isinstance(modified_episodes, str):
+                modified_episodes = extract_json(modified_episodes)
             return {
                 "payload": {
                     "session_id": sid,
@@ -1256,7 +1260,8 @@ class StoryboardAgent(AgentInterface):
             }
         
         script_data = artifacts.get("script_generation", {})
-        if not script_data: raise Exception("未找到剧本数据")
+        if not script_data:
+            raise Exception("未找到剧本数据")
         
         episodes = script_data.get("episodes", [])
         if not episodes:

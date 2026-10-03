@@ -2,6 +2,7 @@ import logging
 import queue
 import sys
 from logging.handlers import QueueHandler, QueueListener
+
 from config import Config
 
 _listener = None

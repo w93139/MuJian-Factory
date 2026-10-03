@@ -9,7 +9,6 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from functools import partial
 from typing import Any, Dict, List, Optional
 
 from json_utils import extract_json
@@ -164,7 +163,6 @@ class ScriptWriterAgent(AgentInterface):
             sid = input_data.get("session_id", "")
             if isinstance(modified, str):
                 modified = self._extract_json_from_text(modified) or {}
-            is_zh = any('\u4e00' <= c <= '\u9fff' for c in modified.get("title", ""))
             modified["session_id"] = sid
             # 【优化】移除手动调用 self._save_result，依靠 Orchestrator 自动保存
             return {"payload": modified, "requires_intervention": False, "stage_completed": True}
@@ -191,7 +189,7 @@ class ScriptWriterAgent(AgentInterface):
                 result_payload["new_settings"] = new_settings
                 result_payload["new_episodes"] = new_ep_list
 
-                logger.info(f"[ScriptWriter] Confirmed continuation. Providing incremental data to Orchestrator.")
+                logger.info("[ScriptWriter] Confirmed continuation. Providing incremental data to Orchestrator.")
                 return {"payload": result_payload, "requires_intervention": False, "stage_completed": True}
 
             # 处理 delete_continue 的情况，直接丢弃新增内容，保持原有剧本数据不变
