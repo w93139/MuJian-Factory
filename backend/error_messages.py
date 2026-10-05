@@ -8,6 +8,8 @@ from config import settings
 
 def safe_error_text(error: BaseException | str) -> str:
     message = str(error)
+    if "ModelNotOpen" in message:
+        return "该账号尚未开通此模型，请先在供应商控制台开通或选择其他模型。"
     values = (
         settings.DASHSCOPE_API_KEY,
         settings.ARK_API_KEY,

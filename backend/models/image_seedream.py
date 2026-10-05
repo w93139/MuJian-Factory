@@ -13,7 +13,7 @@ import requests
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from config import Config
-from usage import reserve_usage
+from usage import billable_request
 
 # 模型名称映射表（旧名称 -> 新名称）
 MODEL_NAME_MAP: Dict[str, str] = {
@@ -160,13 +160,21 @@ class SeedreamClient:
         }
 
         width, height = 1920, 1080  # 默认
-        min_pixels = 3686400
+        modern = model in {"doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-flash-260915"}
+        min_pixels = 921600 if modern else 3686400
 
         if size:
             parts = size.split("*")
             if len(parts) == 2:
                 w, h = int(parts[0]), int(parts[1])
                 width, height = w, h
+
+        if width <= 0 or height <= 0:
+            raise ValueError("图片尺寸必须为正数")
+        if modern and (not min_pixels <= width * height <= 4624220 or not 1 / 16 <= width / height <= 16):
+            raise ValueError("Seedream 5 Pro/Flash 图片需为 921600–4624220 像素，比例在 1:16–16:1 内")
+        if modern and len(image_paths or []) > 10:
+            raise ValueError("Seedream 5 Pro/Flash 最多支持 10 张参考图")
 
         # 确保满足最小像素要求
         if width * height < min_pixels:
@@ -185,10 +193,9 @@ class SeedreamClient:
                 height = height if height % 2 == 0 else height + 1
 
         # 构建 extra_body
-        extra_body = {
-            "watermark": False,
-            "sequential_image_generation": "disabled",
-        }
+        extra_body = {"watermark": False}
+        if not modern:
+            extra_body["sequential_image_generation"] = "disabled"
 
         # 添加其他参数
         if "seed" in kwargs:
@@ -220,17 +227,14 @@ class SeedreamClient:
             extra_body["image"] = ref_images
 
         # 调用 API
-        reserve_usage(model, images=1)
-        response = self._with_retry(
-            "图片生成",
-            lambda: self.client.images.generate(
+        with billable_request(model, images=1, input_images=len(extra_body.get("image", []))):
+            response = self.client.images.generate(
                 model=model,
                 prompt=prompt,
                 size=f"{width}x{height}",
                 response_format="url",
                 extra_body=extra_body,
-            ),
-        )
+            )
 
         # 下载图片到本地
         generated_paths = []

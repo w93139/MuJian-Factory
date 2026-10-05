@@ -36,6 +36,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "api_providers": {
         "common": {
             "print_model_input": False,
+            "unavailable_models": [],
             "proxy": "",
             "request_timeout": 180,
         },
@@ -56,7 +57,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         },
     },
     "models": {
-        "llm": "qwen3-max",
+        "llm": "qwen3.8-flash",
         "vlm": "qwen3.5-plus",
         "image_it2i": "wan2.7-image",
         "image_t2i": "wan2.7-image",

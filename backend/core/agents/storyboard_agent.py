@@ -8,6 +8,7 @@
 import asyncio
 import json
 import logging
+import os
 import re
 import threading
 from datetime import datetime
@@ -489,6 +490,8 @@ class StoryboardAgent(AgentInterface):
                     return extracted
                 raise ValueError("模型输出不是 JSON 数组")
             except Exception as exc:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 last_error = exc
                 logger.warning("[Storyboard] %s attempt %d failed: %s", label, attempt + 1, exc)
         logger.error("[Storyboard] %s failed after retries. Last raw: %s", label, raw[:2000])
@@ -527,6 +530,8 @@ class StoryboardAgent(AgentInterface):
                     return extracted
                 raise ValueError("模型输出不是 JSON 对象")
             except Exception as exc:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 last_error = exc
                 logger.warning("[Storyboard] %s attempt %d failed: %s", label, attempt + 1, exc)
         logger.error("[Storyboard] %s failed after retries. Last raw: %s", label, raw[:2000])
@@ -755,6 +760,8 @@ class StoryboardAgent(AgentInterface):
                     logger.info("[Storyboard] Episode %s staging continuity passed.", ep_n)
                 return segments
             except Exception as exc:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 last_error = exc
                 logger.warning("[Storyboard] Episode %s staging continuity attempt %d failed: %s", ep_n, attempt + 1, exc)
         logger.warning("[Storyboard] Episode %s staging continuity check skipped after retries: %s", ep_n, last_error)
@@ -791,6 +798,8 @@ class StoryboardAgent(AgentInterface):
                 )
                 return self._validate_segment_plan(ep_n, raw_plan, units)
             except Exception as exc:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 last_error = exc
                 logger.warning("[Storyboard] Episode %s segment plan validation attempt %d failed: %s", ep_n, attempt + 1, exc)
 
@@ -825,6 +834,8 @@ class StoryboardAgent(AgentInterface):
                 )
                 return self._normalize_segment_design(ep_n, plan, raw_design)
             except Exception as exc:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 last_error = exc
                 logger.warning(
                     "[Storyboard] Episode %s segment %s design attempt %d failed: %s",

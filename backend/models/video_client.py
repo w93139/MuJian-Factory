@@ -11,7 +11,7 @@ from typing import Optional
 from config import Config
 from models.config_model import get_model_config
 from models.video_dashscope import DashscopeVideoClient
-from models.video_params import normalize_video_params
+from models.video_params import normalize_video_params, validate_video_inputs
 from models.video_seedance import SeedanceVideoClient
 from path_utils import absolute_path, media_reference_path
 
@@ -100,6 +100,7 @@ class VideoClient:
         audio_path = media_reference_path(audio_path)
         model = model or Config.VIDEO_FIRST_FRAME_MODEL
 
+        validate_video_inputs(model, **{key: value for key, value in locals().items() if key != "model"})
         normalized = normalize_video_params(model, duration, resolution, video_ratio)
         duration = normalized.duration
         resolution = normalized.resolution

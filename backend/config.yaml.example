@@ -7,6 +7,8 @@ server:
 api_providers:
   common:
     print_model_input: false
+    # 当前账号未开通的模型 ID；保留历史数据读取，但从生成候选排除。
+    unavailable_models: []
     proxy: ''
     request_timeout: 180
   dashscope:
@@ -22,7 +24,7 @@ api_providers:
     base_url: ''
     models: []
 models:
-  llm: qwen3-max
+  llm: qwen3.8-flash
   vlm: qwen3.5-plus
   image_it2i: wan2.7-image
   image_t2i: wan2.7-image

@@ -3,7 +3,6 @@
 import base64
 import logging
 import mimetypes
-import time
 from pathlib import Path
 
 import httpx
@@ -12,6 +11,7 @@ from openai import OpenAI
 from config import Config
 from models.config_model import get_model_config
 from path_utils import absolute_path
+from usage import billable_request
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,13 @@ class ChatClient:
         disable_thinking: bool = False,
         max_tokens: int = 4096,
         temperature: float | None = None,
+        response_format: dict | None = None,
     ) -> str:
         model_info = get_model_config(model)
+        if model_info.get("available") is False:
+            raise ValueError(f"该账号尚未开通此模型：{model}")
+        if web_search and model_info.get("supports_search") is False:
+            raise ValueError(f"该模型不支持联网搜索，请关闭联网搜索：{model}")
         provider = model_info["provider"]
         if not set(model_info.get("type", [])) & {"llm", "vlm"}:
             raise ValueError(f"模型不支持文本或视觉理解: {model}")
@@ -68,13 +73,17 @@ class ChatClient:
             "messages": [{"role": "user", "content": content}],
             "max_tokens": max_tokens,
         }
+        if response_format is not None:
+            if images and response_format.get("type") == "json_schema":
+                raise ValueError("视觉结构化输出请使用 json_object 并在本地校验")
+            request["response_format"] = response_format
         if temperature is not None:
             request["temperature"] = temperature
         if provider == "dashscope":
             extra_body = {}
             if web_search:
                 extra_body["enable_search"] = True
-            if disable_thinking:
+            if disable_thinking or model_info.get("default_disable_thinking"):
                 extra_body["enable_thinking"] = False
             if extra_body:
                 request["extra_body"] = extra_body
@@ -91,18 +100,17 @@ class ChatClient:
             client_kwargs["http_client"] = httpx.Client(proxy=proxy, timeout=timeout)
         client = OpenAI(**client_kwargs)
         try:
-            for attempt in range(3):
-                try:
-                    response = client.chat.completions.create(**request)
-                    choices = getattr(response, "choices", None) or []
-                    content = getattr(getattr(choices[0], "message", None), "content", None) if choices else None
-                    if not isinstance(content, str) or not content.strip():
-                        raise RuntimeError("模型返回空内容")
-                    return content
-                except Exception:
-                    if attempt == 2:
-                        raise
-                    logger.warning("文本模型请求失败，准备第 %s 次重试: model=%s", attempt + 2, model)
-                    time.sleep(2 ** attempt)
+            # UTF-8 bytes conservatively bound text tokens; reserve image tokens
+            # separately, and include the full requested output (including reasoning).
+            with billable_request(
+                model, input_tokens=len(prompt.encode("utf-8")) + 256 + len(images) * 32768,
+                output_tokens=max_tokens,
+            ):
+                response = client.chat.completions.create(**request)
+            choices = getattr(response, "choices", None) or []
+            content = getattr(getattr(choices[0], "message", None), "content", None) if choices else None
+            if not isinstance(content, str) or not content.strip():
+                raise RuntimeError("模型返回空内容，请检查后手动重试")
+            return content
         finally:
             client.close()

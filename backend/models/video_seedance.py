@@ -12,7 +12,7 @@ from typing import Optional
 import requests
 
 from config import Config
-from usage import reserve_usage
+from usage import billable_request
 
 logger = logging.getLogger(__name__)
 
@@ -63,16 +63,17 @@ class SeedanceVideoClient:
         if not self.api_key:
             raise RuntimeError("ARK_API_KEY not set.")
 
-        # 1. 提交任务
-        task_id = self._submit_task(prompt, image_path, model, duration, **kwargs)
+        with billable_request(model, seconds=duration, resolution=kwargs.get("resolution") or "720p"):
+            # 1. 提交任务
+            task_id = self._submit_task(prompt, image_path, model, duration, **kwargs)
         
-        # 2. 轮询等待
-        video_url = self._poll_until_done(task_id)
+            # 2. 轮询等待
+            video_url = self._poll_until_done(task_id)
         
-        # 3. 下载视频
-        self._download_video(video_url, save_path)
+            # 3. 下载视频
+            self._download_video(video_url, save_path)
         
-        return video_url
+            return video_url
 
     def _submit_task(self, prompt: str, image_path: str, model: str, duration: int, **kwargs) -> str:
         # 根据 Seedance 2.0 文档更新接口路径
@@ -118,7 +119,6 @@ class SeedanceVideoClient:
                 payload[key] = kwargs[key]
 
         logger.info(f"SeedanceVideoClient: 提交任务 model={model}, duration={duration}s")
-        reserve_usage(model, seconds=duration)
         resp = requests.post(
             url,
             headers=self._headers(),

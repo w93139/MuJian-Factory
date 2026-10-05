@@ -425,9 +425,100 @@ MODEL_CONFIG: dict[str, Any] = {'models': {'qwen3.7-max': {'name': 'Qwen 3.7 Max
 
 
 
+# New releases stay in the existing provider/family registry. Advertised abilities
+# and implemented adapter abilities deliberately remain separate.
+_NEW_MODELS = {
+    "qwen3.8-flash": {
+        "name": "Qwen 3.8 Flash", "provider": "dashscope", "family": "qwen",
+        "type": ["llm", "vlm"], "concurrency": 10,
+        "price_per_1k_input_token": 0.0008, "price_per_1k_output_token": 0.0027,
+        "api_contract_verified": True, "supports_search": False,
+        "default_disable_thinking": True,
+    },
+    "qwen3.8-max": {
+        "name": "Qwen 3.8 Max", "provider": "dashscope", "family": "qwen",
+        "type": ["llm", "vlm"], "concurrency": 10,
+        "price_per_1k_input_token": 0.012, "price_per_1k_output_token": 0.036,
+        "api_contract_verified": True, "supports_search": False,
+        "default_disable_thinking": True,
+    },
+    "deepseek-v4.1-flash": {
+        "name": "DeepSeek V4.1 Flash", "provider": "dashscope", "family": "deepseek",
+        "type": ["llm"], "concurrency": 10,
+        "price_per_1k_input_token": 0.002, "price_per_1k_output_token": 0.008,
+        "api_contract_verified": True, "supports_search": False,
+        "default_disable_thinking": True,
+    },
+}
+for _model, _name, _price in (
+    ("doubao-seedream-5-0-pro-260628", "Seedream 5.0 Pro", 0.6),
+    ("doubao-seedream-5-0-flash-260915", "Seedream 5.0 Flash", 0.12),
+):
+    _NEW_MODELS[_model] = {
+        "name": _name, "provider": "ark", "family": "seedream",
+        "type": ["t2i", "i2i"], "concurrency": 5, "price_per_image": _price,
+        "capabilities": {
+            "ability_type": "image_generation",
+            "ability_types": ["text_to_image", "image_to_image", "reference_image"],
+            "adapter_ability_types": ["text_to_image", "image_to_image", "reference_image"],
+            "input_modalities": ["text", "image"], "adapter_input_modalities": ["text", "image"],
+            "api_contract_verified": True, "resolutions": ["1K", "1.5K", "2K"],
+            "ratios": ["16:9", "9:16", "1:1", "4:3", "3:4"],
+            "min_pixels": 921600, "max_pixels": 4624220, "max_reference_images": 10,
+        },
+    }
+for _model, _name, _family, _minimum, _maximum, _rates in (
+    ("wan3.0-video", "Wan 3.0 Video", "wan", 2, 30, {"480P": 0.3, "720P": 0.6, "1080P": 1.2}),
+    ("happyhorse-1.1-i2v", "HappyHorse 1.1 I2V", "happyhorse", 3, 15,
+     {"480P": 0.45, "720P": 0.9, "1080P": 1.2}),
+):
+    _NEW_MODELS[_model] = {
+        "name": _name, "provider": "dashscope", "family": _family,
+        "type": ["video"], "concurrency": 5, "price_per_second": max(_rates.values()),
+        "price_per_second_by_resolution": _rates,
+        "capabilities": {
+            "ability_type": "image_to_video", "ability_types": ["first_frame_i2v", "native_audio"],
+            "adapter_ability_types": ["first_frame_i2v", "native_audio"],
+            "input_modalities": ["text", "image"], "adapter_input_modalities": ["text", "image"],
+            "duration": {"min": _minimum, "max": _maximum, "integer": True, "verified": True},
+            "resolutions": list(_rates), "ratios": ["16:9", "9:16", "1:1", "4:3", "3:4"],
+            "api_contract_verified": True,
+        },
+    }
+MODEL_CONFIG["models"] = {**_NEW_MODELS, **MODEL_CONFIG["models"]}
+MODEL_CONFIG["models"]["wan2.7-image-pro"]["price_per_image"] = 0.5
+MODEL_CONFIG["models"]["doubao-seedream-5-0-pro-260628"]["input_image_price_after_first"] = 0.02
+# Preserve the existing Wan 2.7 continuation/audio adapter when enforcing inputs.
+MODEL_CONFIG["models"]["wan2.7-i2v"]["capabilities"]["adapter_ability_types"].append("video_continuation")
+MODEL_CONFIG["models"]["wan2.7-i2v"]["capabilities"]["adapter_input_modalities"] = ["text", "image", "audio", "video"]
+
+
+_LEGACY_MENU_MODELS = {
+    "qwen3-max", "qwen3.5-plus", "qwen3.6-max-preview", "qwen3.6-plus", "qwen3.6-flash",
+    "doubao-seedream-4-0-250828",
+}
+
+
+def _menu_visible(model_id: str) -> bool:
+    configured = set(Config.CONFIG.get("models", {}).values())
+    return model_id not in _LEGACY_MENU_MODELS or model_id in configured
+
+
+def ensure_model_available(model: str) -> dict[str, Any]:
+    metadata = get_model_config(model)
+    if metadata.get("available") is False:
+        raise ValueError(f"该账号尚未开通此模型：{model}")
+    return metadata
+
+
 def load_model_config() -> dict[str, Any]:
     """Return built-in models plus currently configured OpenAI-compatible models."""
     registry = deepcopy(MODEL_CONFIG)
+    unavailable = Config.CONFIG.get("api_providers", {}).get("common", {}).get("unavailable_models", [])
+    for model_id in unavailable:
+        if model_id in registry["models"]:
+            registry["models"][model_id]["available"] = False
+            registry["models"][model_id]["unavailable_reason"] = "该账号尚未开通此模型"
     configured = (
         Config.CONFIG.get("api_providers", {})
         .get("openai_compatible", {})
@@ -479,7 +570,7 @@ def get_max_concurrency(model: str, enable_concurrency: bool = False) -> int:
 def get_models_by_type(model_type: str) -> list[dict[str, Any]]:
     result = []
     for model_id, metadata in load_model_config()["models"].items():
-        if model_type in (metadata.get("type") or []):
+        if model_type in (metadata.get("type") or []) and metadata.get("available") is not False and _menu_visible(model_id):
             result.append({"id": model_id, **metadata})
     return result
 
@@ -527,12 +618,12 @@ def list_api_models(
     required_adapter_abilities: Optional[list[str]] = None,
     verified_only: bool = False,
 ) -> list[dict[str, Any]]:
-    records = model_records(media_type=media_type)
+    records = [record for record in model_records(media_type=media_type) if record.get("available") is not False and _menu_visible(record["model"])]
     required = set(required_adapter_abilities or [])
     if verified_only:
         records = [record for record in records if record.get("api_contract_verified", True)]
     if required:
-        records = [record for record in records if required.intersection(model_ability_tags(record))]
+        records = [record for record in records if required.issubset(model_ability_tags(record))]
     return records
 
 
@@ -584,12 +675,9 @@ def image_capabilities(provider: str, model: str) -> dict[str, Any]:
 
 
 def model_ability_tags(record: dict[str, Any]) -> set[str]:
-    tags = set(record.get("adapter_ability_types") or [])
-    tags.update(record.get("ability_types") or [])
-    if record.get("ability_type"):
-        tags.add(record["ability_type"])
-    tags.update(record.get("type") or [])
-    return tags
+    # Never advertise an unimplemented provider ability as selectable.
+    return set(record.get("adapter_ability_types") or [])
+
 
 
 def _workflow_info(model_id: str, metadata: dict[str, Any], media_type: str) -> dict[str, Any]:
@@ -602,6 +690,7 @@ def _workflow_info(model_id: str, metadata: dict[str, Any], media_type: str) -> 
         "source": "api",
         "provider": provider,
         "family": metadata.get("family"),
+        "available": metadata.get("available", True),
         "model": model_id,
         "media_type": media_type,
         "type": metadata.get("type", []),

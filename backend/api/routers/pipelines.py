@@ -171,6 +171,10 @@ async def get_api_models(
         models = []
         for model in get_models_by_type(model_type):
             capabilities = model_type_capabilities(model_type, model)
+            if verified_only is True and not capabilities.get("api_contract_verified", False):
+                continue
+            if isinstance(ability, str) and ability not in capabilities.get("adapter_ability_types", []):
+                continue
             models.append({
                 "id": model["id"],
                 "label": model.get("name") or model["id"],

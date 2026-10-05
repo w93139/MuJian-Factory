@@ -180,6 +180,8 @@ class CharacterDesignerAgent(AgentInterface):
         resolution = "2K"
         current_prompt = base_prompt
 
+        if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+            max_iterations = 1
         for iteration in range(max_iterations):
             self._check_cancel()
 
@@ -234,6 +236,8 @@ class CharacterDesignerAgent(AgentInterface):
                     self._report_progress("角色设计", f"重新生成中 ({iteration + 2}/{max_iterations}): {name}", 0)
 
             except Exception as e:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 logger.error("Asset gen failed for %s %s(%s): %s", asset_type, name, asset_id, safe_error_text(e))
 
         # 达到最大迭代次数，尝试使用 VLM 选择最佳图片

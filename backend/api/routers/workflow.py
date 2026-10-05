@@ -58,7 +58,7 @@ def _require_model_fields(values: dict) -> None:
 async def start_project(req: ProjectStartRequest):
     final_idea = merge_uploaded_file_into_idea(req.idea, req.file_path)
     quick_demo = req.target_duration_seconds is not None
-    demo_model = quick_demo_video_model() if quick_demo else None
+    demo_model = quick_demo_video_model(req.video_first_frame_model) if quick_demo else None
     model_values = req.model_dump()
     if demo_model:
         model_values["video_generation_mode"] = "first_frame"

@@ -60,3 +60,23 @@ def normalize_video_params(
         resolution=_supported_choice(model, "resolution", resolution, capabilities.get("resolutions") or [], "720P"),
         ratio=_supported_choice(model, "ratio", ratio, capabilities.get("ratios") or [], "16:9"),
     )
+
+
+def validate_video_inputs(model: str, **inputs) -> None:
+    metadata = get_model_config(model)
+    if metadata.get("available") is False:
+        raise ValueError(f"该账号尚未开通此模型：{model}")
+    abilities = set(metadata.get("capabilities", {}).get("adapter_ability_types", []))
+    requirements = {
+        "last_image_path": "start_end_frame_i2v", "first_clip_path": "video_continuation",
+        "reference_image_path": "reference_to_video", "reference_image_paths": "reference_to_video",
+        "reference_video_paths": "reference_to_video", "reference_audio_path": "voice_reference",
+        "audio_path": "audio_driven_i2v",
+    }
+    for field, ability in requirements.items():
+        if inputs.get(field) and ability not in abilities:
+            if field in {"first_clip_path", "reference_image_path"} and "video_editing" in abilities:
+                continue
+            raise ValueError(f"模型当前未适配 {ability} 输入：{model}")
+    if model in {"wan3.0-video", "happyhorse-1.1-i2v"} and not inputs.get("image_path"):
+        raise ValueError(f"模型当前需要一张首帧图片：{model}")

@@ -100,16 +100,16 @@ def test_seedream_retries_download_and_uses_save_dir(tmp_path, status):
     assert get.call_count == 2 and sleep.call_count == 1
 
 
-def test_seedream_retries_generation_timeout_and_warns_on_missing_reference(tmp_path, caplog):
+def test_seedream_does_not_resubmit_generation_timeout_and_warns_on_missing_reference(tmp_path, caplog):
     client = SeedreamClient(api_key="test-key")
     client.client.images.generate = MagicMock(side_effect=[
         httpx.ReadTimeout("temporary"),
         SimpleNamespace(data=[SimpleNamespace(url="https://example.test/image")]),
     ])
     client._download_image = MagicMock(return_value=str(tmp_path / "image.png"))
-    with patch("models.image_seedream.time.sleep"):
-        assert client.generate_image("scene", "session-1") == [str(tmp_path / "image.png")]
-    assert client.client.images.generate.call_count == 2
+    with pytest.raises(httpx.ReadTimeout):
+        client.generate_image("scene", "session-1")
+    assert client.client.images.generate.call_count == 1
 
     with pytest.raises(ValueError, match="参考图均不可用"):
         client.generate_image("scene", "session-1", image_paths=[str(tmp_path / "missing.png")])

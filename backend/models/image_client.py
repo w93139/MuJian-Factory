@@ -4,7 +4,7 @@ import re
 from typing import List, Optional
 
 from config import Config
-from models.config_model import get_model_config
+from models.config_model import ensure_model_available
 from models.image_dashscope import DashScopeClient
 from models.image_processor import ImageProcessor
 from models.image_seedream import SeedreamClient
@@ -135,7 +135,16 @@ class ImageClient:
             lines.append("-" * 30)
             logger.info("\n%s", "\n".join(lines))
             
-        model_info = get_model_config(model)
+        model_info = ensure_model_available(model)
+        if model in {"doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-flash-260915"} and not custom_size:
+            tiers = {"1K": 1048576, "1.5K": 2359296, "2K": 4194304,
+                     "720P": 1048576, "1080P": 2359296}
+            if resolution not in tiers:
+                raise ValueError("Seedream 5 Pro/Flash 支持 1K、1.5K、2K 图片")
+            ratio_w, ratio_h = (int(part) for part in video_ratio.split(":"))
+            width = int((tiers[resolution] * ratio_w / ratio_h) ** 0.5) // 2 * 2
+            height = int(width * ratio_h / ratio_w) // 2 * 2
+            size = f"{width}*{height}"
         required_type = "i2i" if image_paths else "t2i"
         if required_type not in model_info.get("type", []):
             raise ValueError(f"模型不支持{required_type}图片生成: {model}")

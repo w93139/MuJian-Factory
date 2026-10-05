@@ -15,6 +15,7 @@ def _configured(monkeypatch, provider="dashscope", types=None):
     monkeypatch.setattr(chat_client, "get_model_config", lambda _model: {
         "provider": provider, "type": types or ["llm", "vlm"]
     })
+    monkeypatch.setattr("usage.get_model_config", chat_client.get_model_config)
     for key, value in {
         "DASHSCOPE_API_KEY": "test-key", "DASHSCOPE_COMPATIBLE_BASE_URL": "https://dashscope.test/v1",
         "ARK_API_KEY": "test-key", "ARK_BASE_URL": "https://ark.test/v3",
@@ -43,14 +44,13 @@ def test_routes_to_provider_and_keeps_model_id(monkeypatch, provider, base_url):
     assert sdk.chat.completions.create.call_args.kwargs["model"] == "exact-model-id"
 
 
-def test_empty_response_retries_three_attempts_then_raises(monkeypatch):
+def test_empty_response_is_not_automatically_resubmitted(monkeypatch):
     sdk = _configured(monkeypatch)
     sdk.chat.completions.create.return_value = _response(None)
-    monkeypatch.setattr(chat_client.time, "sleep", lambda _seconds: None)
 
     with pytest.raises(RuntimeError, match="空内容"):
         chat_client.ChatClient().query("问题", "model")
-    assert sdk.chat.completions.create.call_count == 3
+    assert sdk.chat.completions.create.call_count == 1
 
 
 def test_unknown_model_fails_before_request(monkeypatch):

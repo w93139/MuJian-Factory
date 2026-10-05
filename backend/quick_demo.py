@@ -1,6 +1,6 @@
 """The short-film preset chooses a registered fast first-frame video model."""
 
-from models.config_model import get_model_config
+from models.config_model import ensure_model_available
 
 FAST_VIDEO_MODELS = (
     "wan2.6-i2v-flash",
@@ -8,10 +8,10 @@ FAST_VIDEO_MODELS = (
 )
 
 
-def quick_demo_video_model() -> str:
-    for model_id in FAST_VIDEO_MODELS:
+def quick_demo_video_model(preferred: str | None = None) -> str:
+    for model_id in ((preferred,) if preferred else ()) + FAST_VIDEO_MODELS:
         try:
-            model = get_model_config(model_id)
+            model = ensure_model_available(model_id)
         except ValueError:
             continue
         capabilities = model.get("capabilities", {})

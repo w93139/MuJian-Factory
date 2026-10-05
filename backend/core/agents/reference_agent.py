@@ -295,6 +295,8 @@ class ReferenceGeneratorAgent(AgentInterface):
         all_versions = []
         all_eval_results = []
 
+        if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+            max_versions = 1
         for version in range(max_versions):
             self._check_cancel()
 
@@ -356,6 +358,8 @@ class ReferenceGeneratorAgent(AgentInterface):
                     self._report_progress("参考图", f"重新生成中 ({version + 2}/{max_versions}): {segment_id}", 0)
 
             except Exception as e:
+                if os.environ.get("MUJIAN_TASK_BUDGET_CNY"):
+                    raise
                 logger.error("Segment %s image generation failed: %s", segment_id, safe_error_text(e))
 
         # 所有版本都没有达到硬性标准，使用 VLM 选择最好的

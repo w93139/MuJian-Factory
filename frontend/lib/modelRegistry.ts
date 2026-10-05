@@ -2,8 +2,8 @@ import type { ProviderGroup } from '@/config/models';
 import { fetchApiModels } from '@/lib/workflowApi';
 
 const PROVIDER_LABELS: Record<string, string> = {
-  dashscope: 'DashScope',
-  ark: 'ARK (Volcengine)',
+  dashscope: '阿里云百炼',
+  ark: '火山方舟',
   openai_compatible: '通用 OpenAI 兼容',
 };
 
