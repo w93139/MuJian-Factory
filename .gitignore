@@ -30,3 +30,22 @@ docs/codex/
 # Source copy; frontend/public and frontend/app contain the shipped logo
 /logo.png
 deploy/certs/
+
+# Local preview builds and evidence
+apps/**/.next/
+apps/**/node_modules
+apps/**/next-env.d.ts
+apps/**/*.tsbuildinfo
+verification/
+screenshots/
+research/
+frontend/public/comparison-assets
+frontend/public/comparison.html
+
+# Local generated preview media and review evidence
+comparison-preview.png
+frontend/public/demo/
+frontend/public/docs/
+frontend/public/screenshots/
+frontend/public/research/
+comparison.html

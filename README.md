@@ -1,3 +1,28 @@
+# 幕间 · 光影叙事
+
+已选定「光影叙事」作为前端设计方向：黑白光影、动态线场、无标点大字与精简的制作界面。保留必要操作、参数、状态和权限提示。另两版保留为设计备选。
+
+## 预览选定设计
+
+```bash
+cd frontend
+npm ci
+cd ..
+uv run --with imageio-ffmpeg python scripts/generate-demo-media.py
+cd frontend
+npm run dev:director
+```
+
+打开 http://127.0.0.1:3101 。生产方式预览可先执行 `npm run build:director`，再执行 `npm run start:director`。
+
+这是可交互的本地演示前端，使用预置素材与浏览器本地状态，不调用模型或生产后端；示例视频由脚本生成，不提交到 Git。原项目真实后端入口继续使用 `npm run dev`。正式接入新设计仍需实现 API adapter，契约差异见 [接口复核](docs/business-contract-review.md)。
+
+备选入口：`npm run dev:guided`（3102）、`npm run dev:gallery`（3103）。[三版说明](docs/frontend-concepts.md) 包含完整范围，[设计参考映射](docs/reference-map-v3.md) 记录实际参考与源码来源。对比页的历史截图与验证日志只保存在本地，不纳入源码仓库。
+
+---
+
+以下保留原项目说明：
+
 # 幕间 Mujian
 
 幕间是从创意到成片的 AI 视频创作工作台，可把一句故事梗概制成短片，并以只读展示模式供面试官浏览。
