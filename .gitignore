@@ -49,3 +49,12 @@ frontend/public/docs/
 frontend/public/screenshots/
 frontend/public/research/
 comparison.html
+
+# Preserved versions and local execution evidence
+/旧版完整备份/
+/新前端设计版/
+/.local-artifacts/
+**/*.tsbuildinfo
+
+**/.next-live/
+**/.next-preview/

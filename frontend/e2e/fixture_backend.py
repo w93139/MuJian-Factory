@@ -14,7 +14,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 SOURCE = ROOT / "backend"
-PORT = "18765"
+PORT = os.getenv("MUJIAN_TEST_API_PORT", "18765")
 ADMIN_PASSWORD = "e2e-admin-password"
 INVITE_CODE = "E2EDEMO2"
 
@@ -24,8 +24,35 @@ def ignore_files(directory: str, names: list[str]) -> set[str]:
     return {name for name in names if name in ignored or name.startswith(".env")}
 
 
+def seed_live_sessions(session_dir):
+    """Synthetic content only; actual FastAPI reads/writes these isolated JSON files."""
+    script = {"title":"接口联调短片", "logline":"一封信的旅行", "episodes":[
+        {"episode_number":1,"act_title":"第一幕","content":"原有第一集", "custom_script":"keep"},
+        {"episode_number":2,"act_title":"第二幕","content":"原有第二集"}], "characters":[],"settings":[],
+        "new_episodes":[{"episode_number":3,"act_title":"续写第三幕","content":"已经存在的续写草稿"}],
+        "new_characters":[],"new_settings":[]}
+    storyboard = {"custom_top":{"keep":True}, "episodes":[
+        {"episode_number":1,"episode_title":"第一幕","custom_episode":"keep","segments":[
+            {"segment_id":"seg_01_01","segment_number":1,"location":"窗边","characters":["旅人"],"total_duration":7,"custom_segment":"keep","shots":[
+                {"shot_number":1,"shot_type":"远景","duration":3,"content":"清晨第一镜","plot":"清晨第一镜","custom_shot":"keep"},
+                {"shot_number":2,"shot_type":"近景","duration":4,"content":"信件第二镜"}]}]},
+        {"episode_number":2,"episode_title":"第二幕","segments":[
+            {"segment_id":"seg_02_01","segment_number":1,"location":"车站","shots":[{"shot_number":1,"shot_type":"全景","duration":5,"content":"远方第三镜"}]}]}]}
+    ref="code/result/image/e2e-showcase/image.png"
+    clip="code/result/video/e2e-showcase/video.mp4"
+    for sid in ("live-edit","live-continue","live-discard","live-add"):
+        data={"session_id":sid,"current_stage":"storyboard","status":{s:"completed" for s in ["script_generation","character_design","storyboard","reference_generation","video_generation","post_production"]},
+          "artifacts":{"script_generation":script,"storyboard":storyboard,
+          "reference_generation":{"scenes":[{"id":"seg_01_01","name":"窗边参考图","selected":ref,"versions":[ref,ref+"?version=2"],"status":"done"}]},
+          "video_generation":{"clips":[{"id":"seg_01_01","name":"窗边视频","selected":clip,"versions":[clip,clip+"?version=2"],"status":"done"}]}},
+          "meta":{"idea":"接口联调短片"},"showcase":True}
+        (session_dir/(sid+".json")).write_text(json.dumps(data,ensure_ascii=False))
+
+
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="mujian-e2e-") as temporary:
+    artifacts = ROOT / ".local-artifacts"
+    artifacts.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="mujian-e2e-", dir=artifacts) as temporary:
         backend = Path(temporary) / "backend"
         shutil.copytree(SOURCE, backend, ignore=ignore_files)
         session_dir = backend / "code" / "data" / "sessions"
@@ -37,6 +64,8 @@ def main() -> int:
             shutil.copy2(HERE / "fixtures" / name, session_dir / target)
         shutil.copy2(HERE / "fixtures" / "image.png", result_dir / "image" / "e2e-showcase" / "image.png")
         shutil.copy2(HERE / "fixtures" / "video.mp4", result_dir / "video" / "e2e-showcase" / "video.mp4")
+        if os.getenv("MUJIAN_LIVE_TEST") == "1":
+            seed_live_sessions(session_dir)
         task_dir = backend / "code" / "data" / "tasks"
         task_dir.mkdir(parents=True)
         for task_id, title, showcase in (

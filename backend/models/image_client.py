@@ -110,8 +110,9 @@ class ImageClient:
         if isinstance(resolution, str) and re.match(r"^\d+[x*]\d+$", resolution):
             custom_size = resolution.replace("x", "*")
 
-        # Default fallback if ratio or resolution is not found
-        size = custom_size or size_map.get(video_ratio, size_map["16:9"]).get(resolution, "1920*1080")
+        # Keep unsupported choices visible as errors, rather than generating
+        # an unrelated 1920*1080 image. Modern Seedream tiers are resolved below.
+        size = custom_size or size_map.get(video_ratio, {}).get(resolution)
 
         model = model or (Config.IMAGE_IT2I_MODEL if image_paths else Config.IMAGE_T2I_MODEL)
 
@@ -145,6 +146,8 @@ class ImageClient:
             width = int((tiers[resolution] * ratio_w / ratio_h) ** 0.5) // 2 * 2
             height = int(width * ratio_h / ratio_w) // 2 * 2
             size = f"{width}*{height}"
+        if not size:
+            raise ValueError(f"当前图片适配器未支持画幅 {video_ratio} 与分辨率 {resolution} 的组合")
         required_type = "i2i" if image_paths else "t2i"
         if required_type not in model_info.get("type", []):
             raise ValueError(f"模型不支持{required_type}图片生成: {model}")

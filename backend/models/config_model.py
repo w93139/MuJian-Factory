@@ -579,7 +579,15 @@ def model_type_capabilities(model_type: str, metadata: Optional[dict[str, Any]] 
     """Return normalized capability metadata for non-media model selectors."""
     metadata = metadata or {}
     if metadata.get("capabilities"):
-        return deepcopy(metadata["capabilities"])
+        capabilities = deepcopy(metadata["capabilities"])
+        if model_type in {"t2i", "i2i"}:
+            registered = capabilities.get("resolutions", [])
+            declared = capabilities.get("resolution_constraints", {}).get(model_type, registered)
+            # Existing ImageClient maps 2K/4K; the newer Seedream adapter also
+            # implements pixel-area tiers. Do not invent missing 1K/3K mappings.
+            implemented = {"1K", "1.5K", "2K"} if "1.5K" in registered else {"720P", "1080P", "2K", "4K"}
+            capabilities["adapter_resolutions"] = [value for value in declared if value in implemented]
+        return capabilities
     if model_type == "llm":
         return {
             "ability_type": "text_generation",

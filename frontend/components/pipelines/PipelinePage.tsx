@@ -43,7 +43,6 @@ import {
 import { fetchModelGroupsByType, groupModelOptions } from '@/lib/modelRegistry';
 import {
   VIDEO_RATIOS,
-  VIDEO_RESOLUTIONS,
   type ProviderGroup,
 } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
@@ -237,12 +236,13 @@ function MediaUploadField({
   placeholder: string;
   required?: boolean;
 }) {
+  const { canEdit } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [filename, setFilename] = useState('');
   const [error, setError] = useState('');
 
   const handleUpload = async (file?: File) => {
-    if (!file) return;
+    if (!canEdit || !file) return;
     setUploading(true);
     setError('');
     try {
@@ -275,7 +275,7 @@ function MediaUploadField({
             accept={accept}
             onChange={e => handleUpload(e.target.files?.[0])}
             className="absolute inset-0 opacity-0 cursor-pointer"
-            disabled={uploading}
+            disabled={!canEdit || uploading}
           />
           <button
             type="button"
@@ -699,6 +699,9 @@ function PipelineHistory({
 export default function PipelinePage({ pipeline, title, subtitle }: PipelinePageProps) {
   const searchParams = useSearchParams();
   const TitleIcon = PIPELINE_TITLE_ICONS[pipeline];
+  const { canEdit } = useAuth();
+  const [videoCatalog, setVideoCatalog] = useState<ApiModelOption[]>([]);
+  const [imageCatalog, setImageCatalog] = useState<ApiModelOption[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
@@ -752,19 +755,21 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
     fetchApiModels({ mediaType: 'image', ability: imageAbility, verifiedOnly: true })
       .then(models => {
         const groups = groupApiModels(models);
+        setImageCatalog(models);
         setImageModelGroups(groups);
         setImageModel(current => firstModelId(groups, current));
       })
-      .catch(() => {});
+      .catch(cause => setError(cause instanceof Error ? cause.message : '选项读取失败'));
 
     if (pipeline !== 'standard' || standardVideoMode === 'dynamic_video' || (templateMode && templateMediaKind === 'video')) {
       fetchApiModels({ mediaType: 'video', ability: videoAbility, verifiedOnly: true })
         .then(models => {
           const groups = groupApiModels(models);
+          setVideoCatalog(models);
           setVideoModelGroups(groups);
           setVideoModel(current => firstModelId(groups, current));
         })
-        .catch(() => {});
+        .catch(cause => setError(cause instanceof Error ? cause.message : '选项读取失败'));
     }
   }, [pipeline, standardVideoMode, templateMode, templateMediaKind]);
 
@@ -776,7 +781,7 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
         setLlmModelGroups(groups);
         setLlmModel(current => firstModelId(groups, current));
       })
-      .catch(() => {});
+      .catch(cause => setError(cause instanceof Error ? cause.message : '选项读取失败'));
     return () => { cancelled = true; };
   }, []);
 
@@ -787,7 +792,7 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
         setTemplates(items);
         setSelectedTemplateId(current => current || items.find(item => item.ratio === ratio)?.id || items[0]?.id || '');
       })
-      .catch(() => {});
+      .catch(cause => setError(cause instanceof Error ? cause.message : '选项读取失败'));
   }, [pipeline, ratio]);
 
   useEffect(() => {
@@ -814,6 +819,28 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
     [templates, selectedTemplateId]
   );
   const templateVideoEnabled = templateMode && templateMediaKind === 'video';
+  const generatesVideo = pipeline !== 'standard' || standardVideoMode === 'dynamic_video' || templateVideoEnabled;
+  const videoCapabilities = videoCatalog.find(model => model.id === videoModel)?.capabilities || {};
+  const supportedResolutions: string[] = videoCapabilities.resolutions || [];
+  const supportedRatios: string[] = videoCapabilities.ratios || [];
+  const durationContract = videoCapabilities.duration || {};
+  const durationOptions: number[] = durationContract.values || durationContract.options || [];
+  const imageRatios: string[] = imageCatalog.find(model => model.id === imageModel)?.capabilities?.ratios || [];
+  const imageParameterError = pipeline === 'standard' && !templateMode && imageModel && !imageRatios.includes(ratio) ? '当前图片模型未适配所选画幅' : '';
+  const ratioOptions = pipeline === 'standard' && !templateMode ? VIDEO_RATIOS.filter(item => imageRatios.includes(item.id)) : VIDEO_RATIOS;
+  useEffect(() => {
+    if (pipeline === 'standard' && !templateMode && imageRatios.length) setRatio(current => imageRatios.includes(current) ? current : imageRatios[0]);
+  }, [pipeline, templateMode, imageModel, imageCatalog]);
+  const parameterError = imageParameterError || (generatesVideo && videoModel ? (
+    supportedResolutions.length && !supportedResolutions.includes(videoResolution) ? '请选择当前模型支持的分辨率' :
+    supportedRatios.length && !supportedRatios.includes(templateVideoEnabled ? selectedTemplate?.media_ratio || ratio : ratio) ? '当前模型不支持所选画幅或模板媒体画幅' :
+    pipeline !== 'digital_human' && (!Number.isInteger(duration) || (durationOptions.length ? !durationOptions.includes(duration) : duration < (durationContract.min || 1) || duration > (durationContract.max || 15))) ? '请选择当前模型支持的时长' : ''
+  ) : '');
+  useEffect(() => {
+    if (!generatesVideo) return;
+    setVideoResolution(current => supportedResolutions.includes(current) ? current : supportedResolutions[0] || current);
+    setDuration(current => durationOptions.length ? (durationOptions.includes(current) ? current : durationOptions[0]) : Math.max(durationContract.min || 1, Math.min(durationContract.max || 15, current)));
+  }, [videoModel, videoCatalog, generatesVideo]);
   const selectedTemplateFields = useMemo(
     () => selectedTemplate?.fields || [],
     [selectedTemplate]
@@ -849,14 +876,15 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
   };
 
   const canSubmit = useMemo(() => {
+    if (!canEdit || parameterError || (generatesVideo && !videoModel) || (pipeline !== 'action_transfer' && (!llmModel || !imageModel))) return false;
     if (pipeline === 'standard') {
       return text.trim().length > 0
-        && (!templateMode || Boolean(selectedTemplate))
+        && (!templateMode || Boolean(selectedTemplate && selectedTemplate.ratio === ratio))
         && (!templateVideoEnabled || Boolean(selectedTemplate?.supports_video));
     }
     if (pipeline === 'action_transfer') return promptText.trim() && imagePath.trim() && videoPath.trim();
     return characterImage.trim() && goodsText.trim();
-  }, [pipeline, text, templateMode, selectedTemplate, templateVideoEnabled, promptText, imagePath, videoPath, characterImage, goodsText]);
+  }, [canEdit, parameterError, generatesVideo, videoModel, llmModel, imageModel, ratio, pipeline, text, templateMode, selectedTemplate, templateVideoEnabled, promptText, imagePath, videoPath, characterImage, goodsText]);
 
   useEffect(() => {
     if (!task || !['pending', 'running'].includes(task.status)) return;
@@ -989,6 +1017,8 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
           <p className="text-sm text-gray-500">{subtitle}</p>
         </div>
 
+        {!canEdit && <p className="mb-4 text-sm text-gray-500">只读展示模式不可生成或上传素材</p>}
+        {parameterError && <p role="alert" className="mb-4 text-sm text-red-600">{parameterError}</p>}
         {pipeline === 'standard' && (
           <section className="mb-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -1280,17 +1310,17 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
                   <label className="flex flex-col gap-1.5">
                     <span className="text-xs font-medium text-gray-500">视频比例</span>
                     <select value={ratio} onChange={e => setRatio(e.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none">
-                      {VIDEO_RATIOS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+                      {ratioOptions.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
                     </select>
                   </label>
-                  <label className="flex flex-col gap-1.5">
+                  {generatesVideo && <label className="flex flex-col gap-1.5">
                     <span className="text-xs font-medium text-gray-500">视频分辨率</span>
                     <select value={videoResolution} onChange={e => setVideoResolution(e.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none">
-                      {VIDEO_RESOLUTIONS.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+                      {supportedResolutions.map(value => <option key={value} value={value}>{value}</option>)}
                     </select>
-                  </label>
+                  </label>}
                   {(pipeline === 'action_transfer' || (pipeline === 'standard' && (standardVideoMode === 'dynamic_video' || templateVideoEnabled))) && (
-                    <NumberField label="视频时长" value={duration} onChange={setDuration} min={1} max={10} />
+                    durationOptions.length ? <label className="flex flex-col gap-1.5 text-xs">视频时长<select value={duration} onChange={e => setDuration(Number(e.target.value))}>{durationOptions.map(value => <option key={value} value={value}>{value} 秒</option>)}</select></label> : <NumberField label={pipeline === 'standard' ? '最低视频时长 秒' : '视频时长 秒'} value={duration} onChange={setDuration} min={durationContract.min || 1} max={durationContract.max || 15} />
                   )}
                   {pipeline !== 'action_transfer' && (
                     <>
@@ -1299,6 +1329,8 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
                     </>
                   )}
                 </div>
+                {pipeline === 'standard' && <p className="text-xs text-gray-500">完整文案按句号分段 配音始终开启{generatesVideo ? ' 生成时长受配音长度与模型上限共同约束 最终成片与配音对齐' : ' 图片拼接成片时长随配音确定'}</p>}
+                {pipeline === 'digital_human' && <p className="text-xs text-gray-500">视频按配音与模型时长上限自动分段 暂不支持指定固定时长</p>}
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-gray-500">{pipeline === 'standard' ? '风格控制' : '负向提示词'}</span>
                   <textarea

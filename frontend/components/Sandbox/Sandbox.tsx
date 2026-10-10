@@ -5,9 +5,9 @@ import { Sparkles, Image, Video, MessageSquare, Zap, Loader2, Copy, Check, Trash
 import { useSearchParams } from 'next/navigation';
 import type { ModelOption, ProviderGroup } from '@/config/models';
 import BrandHeader from '@/components/BrandHeader';
-import { deleteSandboxHistoryRecord, fetchSandboxHistoryResult, fetchSandboxTasks, runSandboxTool, setSandboxRecordShowcase, uploadMedia, type SandboxTool } from '@/lib/workflowApi';
+import { deleteSandboxHistoryRecord, fetchSandboxHistoryResult, fetchSandboxTasks, runSandboxTool, setSandboxRecordShowcase, uploadMedia, type SandboxTool, fetchApiModels, type ApiModelOption } from '@/lib/workflowApi';
 import { useAuth } from '@/components/AuthProvider';
-import { fetchModelGroupsByType } from '@/lib/modelRegistry';
+import { groupModelOptions } from '@/lib/modelRegistry';
 
 // 辅助函数：将相对路径转换为完整 URL
 const toMediaUrl = (path: string) => {
@@ -59,6 +59,9 @@ interface HistoryRecord {
     prompt?: string;
     images?: string[];
     reference_image?: string;
+    ratio?: string;
+    resolution?: string;
+    duration?: number;
   };
   output?: {
     response?: string;
@@ -325,6 +328,21 @@ export default function SandboxPage() {
 
   const [selectedModel, setSelectedModel] = useState('');
   const [webSearch, setWebSearch] = useState(false);
+  const [catalog, setCatalog] = useState<ApiModelOption[]>([]);
+  const [ratio, setRatio] = useState('16:9');
+  const [resolution, setResolution] = useState('');
+  const [duration, setDuration] = useState(5);
+  const [actualParameters, setActualParameters] = useState<Record<string, string | number> | null>(null);
+  const capabilities = catalog.find(model => model.id === selectedModel && model.model_type === activeTool)?.capabilities || {};
+  const ratios: string[] = capabilities.ratios || [];
+  const resolutions: string[] = capabilities.adapter_resolutions || capabilities.resolutions || [];
+  const durationSpec = capabilities.duration || {};
+  const durations: number[] = durationSpec.values || durationSpec.options || [];
+  useEffect(() => {
+    setRatio(current => ratios.includes(current) ? current : ratios[0] || '16:9');
+    setResolution(current => resolutions.includes(current) ? current : resolutions[0] || '');
+    setDuration(current => durations.length ? (durations.includes(current) ? current : durations[0]) : Math.max(durationSpec.min || 1, Math.min(durationSpec.max || 15, current)));
+  }, [selectedModel, activeTool, catalog]);
 
   // 获取历史记录
   const fetchHistory = async () => {
@@ -344,25 +362,26 @@ export default function SandboxPage() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      fetchModelGroupsByType('llm'),
-      fetchModelGroupsByType('vlm'),
-      fetchModelGroupsByType('t2i'),
-      fetchModelGroupsByType('i2i'),
-      fetchModelGroupsByType('video'),
-    ])
-      .then(([llm, vlm, t2i, i2i, video]) => {
+    Promise.all((['llm', 'vlm', 't2i', 'i2i', 'video'] as ToolType[]).map(modelType => fetchApiModels({ modelType })))
+      .then(results => {
         if (cancelled) return;
-        const groups = { llm, vlm, t2i, i2i, video };
+        results[4] = results[4].filter(model => model.api_contract_verified && (model.adapter_ability_types || []).some(ability => ['first_frame_i2v', 'text_to_video'].includes(ability)));
+        const types: ToolType[] = ['llm', 'vlm', 't2i', 'i2i', 'video'];
+        const groups = Object.fromEntries(types.map((type, index) => [type, groupModelOptions(results[index])])) as Record<ToolType, ProviderGroup[]>;
+        setCatalog(results.flat());
         setModelGroups(groups);
         setSelectedModel(current => current || firstModelId(groups[activeTool]));
       })
-      .catch(() => {});
+      .catch(cause => setError(cause instanceof Error ? cause.message : '模型选项读取失败'));
     return () => { cancelled = true; };
   }, []);
 
   const applyRecord = (record: HistoryRecord) => {
     setSelectedRecord(record);
+    setRatio(record.input.ratio || '16:9');
+    setResolution(record.input.resolution || '');
+    setDuration(record.input.duration || 5);
+    setActualParameters(record.input.resolution ? { ratio: record.input.ratio || '', resolution: record.input.resolution, ...(record.input.duration ? { duration: record.input.duration } : {}) } : null);
     setActiveTool(record.tool as ToolType);
     setSelectedModel(record.model);
     setPrompt(record.input.prompt || '');
@@ -477,9 +496,10 @@ export default function SandboxPage() {
 
   // 检查是否可以提交
   const canSubmit = () => {
-    if (!selectedModel) return false;
+    if (!canEdit || !selectedModel || loading) return false;
     if (!prompt.trim() && activeTool !== 't2i') return false;
-    if ((activeTool === 'i2i') && !imageUrl) return false;
+    if (['i2i', 'vlm'].includes(activeTool) && !imageUrl) return false;
+    if (activeTool === 'video' && (!capabilities.api_contract_verified || !(capabilities.adapter_ability_types || []).includes(imageUrl ? 'first_frame_i2v' : 'text_to_video'))) return false;
     return true;
   };
 
@@ -508,18 +528,26 @@ export default function SandboxPage() {
           body.images = [imageUrl];
           break;
         case 't2i':
+          body.ratio = ratio;
+          if (resolution) body.resolution = resolution;
           break;
         case 'i2i':
+          body.ratio = ratio;
+          if (resolution) body.resolution = resolution;
           body.image = imageUrl;
           break;
         case 'video':
-          body.image = imageUrl;
+          body.ratio = ratio;
+          if (resolution) body.resolution = resolution;
+          body.duration = duration;
+          body.image = imageUrl || undefined;
           break;
       }
 
-      const data = await runSandboxTool<{ success?: boolean; result?: string | string[]; video_path?: string; error?: string }>(activeTool, body);
+      const data = await runSandboxTool<{ success?: boolean; result?: string | string[]; video_path?: string; parameters?: Record<string, string | number>; error?: string }>(activeTool, body);
 
       if (data.success) {
+        setActualParameters(data.parameters || null);
         if (activeTool === 't2i' || activeTool === 'i2i' || activeTool === 'video') {
           const output = activeTool === 'video'
             ? { video_path: data.video_path }
@@ -645,8 +673,17 @@ export default function SandboxPage() {
                 </div>
               </div>
 
+              {!canEdit && <p className="text-sm text-gray-500 mb-4">只读展示模式不可生成或上传素材</p>}
+              {['t2i', 'i2i', 'video'].includes(activeTool) && <div className="grid grid-cols-3 gap-3 mb-4">
+                <label className="text-sm">画幅<select aria-label="画幅" className="block w-full border rounded p-2" value={ratio} onChange={e => setRatio(e.target.value)} disabled={!canEdit || !ratios.length}>{(ratios.length ? ratios : ['16:9']).map(value => <option key={value}>{value}</option>)}</select></label>
+                <label className="text-sm">分辨率<select aria-label="分辨率" className="block w-full border rounded p-2" value={resolution} onChange={e => setResolution(e.target.value)} disabled={!canEdit || !resolutions.length}>{!resolutions.length && <option value="">模型默认</option>}{resolutions.map(value => <option key={value}>{value}</option>)}</select></label>
+                {activeTool === 'video' && <label className="text-sm">时长 秒{durations.length ? <select aria-label="时长 秒" className="block w-full border rounded p-2" value={duration} onChange={e => setDuration(Number(e.target.value))}>{durations.map(value => <option key={value}>{value}</option>)}</select> : <input aria-label="时长 秒" className="block w-full border rounded p-2" type="number" min={durationSpec.min || 1} max={durationSpec.max || 15} step={1} value={duration} onChange={e => setDuration(Number(e.target.value))} />}</label>}
+              </div>}
+              {activeTool === 'llm' && <p className="text-xs text-gray-500 mb-3">创意强度暂不可配置</p>}
+              {['t2i', 'i2i'].includes(activeTool) && (capabilities.resolutions || []).some((value: string) => !resolutions.includes(value)) && <p className="text-xs text-gray-500 mb-3">部分注册分辨率尚未接入当前图片适配器或不适用于此工具 暂不可选</p>}
+              {activeTool === 't2i' && <p className="text-xs text-gray-500 mb-3">独立风格参数暂不可用 请将风格写入图片描述</p>}
               {/* 图片上传（部分工具需要） */}
-              {(activeTool === 'vlm' || activeTool === 'i2i' || activeTool === 'video') && (
+              {canEdit && (activeTool === 'vlm' || activeTool === 'i2i' || activeTool === 'video') && (
                 <ImageUploader
                   value={imageUrl}
                   onChange={setImageUrl}
@@ -713,7 +750,7 @@ export default function SandboxPage() {
                 {error ? (
                   <p className="text-red-600 text-sm">{error}</p>
                 ) : (
-                  <SandboxOutput output={currentOutput} />
+                  <><SandboxOutput output={currentOutput} />{actualParameters && <p className="mt-3 text-sm">实际参数 {Object.entries(actualParameters).map(([key, value]) => `${({ ratio: '画幅', resolution: '分辨率', duration: '时长 秒' } as Record<string, string>)[key] || key} ${value}`).join(' · ')}</p>}</>
                 )}
               </div>
             )}
@@ -742,6 +779,10 @@ export default function SandboxPage() {
                     onClick={() => {
                       if (manageMode) return;
                       setSelectedRecord(record);
+    setRatio(record.input.ratio || '16:9');
+    setResolution(record.input.resolution || '');
+    setDuration(record.input.duration || 5);
+    setActualParameters(record.input.resolution ? { ratio: record.input.ratio || '', resolution: record.input.resolution, ...(record.input.duration ? { duration: record.input.duration } : {}) } : null);
                       setPrompt(record.input.prompt || '');
                       setImageUrl(record.input.reference_image || record.input.images?.[0] || '');
                       setCurrentOutput(record.output || null);

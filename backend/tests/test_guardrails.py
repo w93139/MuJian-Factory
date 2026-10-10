@@ -71,10 +71,10 @@ async def test_pipeline_reservation_blocks_stage_then_releases_on_failure(monkey
         "task_id": "test-task", "status": "pending", "output_dir": "/tmp/test-task",
     })
     background = BackgroundTasks()
-    pipelines._start_task(background, "standard", {})
+    pipelines._start_task(background, "standard", {"image_model": "wan2.7-image"})
     assert limiter.active_count == 1
     with pytest.raises(HTTPException) as rejected:
-        pipelines._start_task(BackgroundTasks(), "standard", {})
+        pipelines._start_task(BackgroundTasks(), "standard", {"image_model": "wan2.7-image"})
     assert rejected.value.status_code == 429
 
     class Agent:

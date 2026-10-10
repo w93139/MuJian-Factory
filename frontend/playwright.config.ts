@@ -5,6 +5,7 @@ const baseURL = 'http://127.0.0.1:18766';
 
 export default defineConfig({
   testDir: './e2e',
+  outputDir: '../.local-artifacts/legacy-test-results',
   testMatch: '*.spec.ts',
   fullyParallel: false,
   workers: 1,
@@ -24,7 +25,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'MUJIAN_E2E=1 BACKEND_API_URL=http://127.0.0.1:18765 npm run dev -- --hostname 127.0.0.1 --port 18766',
+      command: 'NEXT_PUBLIC_MUJIAN_LEGACY=1 MUJIAN_E2E=1 BACKEND_API_URL=http://127.0.0.1:18765 npm run dev -- --hostname 127.0.0.1 --port 18766',
       url: `${baseURL}/login`,
       reuseExistingServer: false,
       timeout: 90_000,

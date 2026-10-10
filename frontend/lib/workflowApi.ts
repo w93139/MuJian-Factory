@@ -341,6 +341,7 @@ export async function runSandboxTool<T>(tool: SandboxTool, body: Record<string, 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+  await requireOkResponse(response, '请求失败');
   return readSandboxJsonResponse<T>(response);
 }
 
@@ -421,7 +422,7 @@ export async function startProject(params: {
 
 export async function getProjectStatus(sessionId: string): Promise<ProjectStatus> {
   const resp = await apiFetch(`/api/project/${sessionId}/status`);
-  if (!resp.ok) throw new Error('Failed to get project status');
+  await requireOkResponse(resp, '读取项目失败');
   return resp.json();
 }
 
@@ -516,7 +517,7 @@ export async function saveSelections(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(selections),
   });
-  if (!resp.ok) throw new Error('保存选项失败');
+  await requireOkResponse(resp, '保存选项失败');
   return resp.json();
 }
 

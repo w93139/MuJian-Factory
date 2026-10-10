@@ -156,8 +156,8 @@ def test_video_client_rejects_empty_result(tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("route,payload", [
-    (sandbox.sandbox_t2i, SandboxT2IRequest(model="image", prompt="scene")),
-    (sandbox.sandbox_i2i, SandboxI2IRequest(model="image", prompt="scene", image="reference.png")),
+    (sandbox.sandbox_t2i, SandboxT2IRequest(model="wan2.7-image", prompt="scene")),
+    (sandbox.sandbox_i2i, SandboxI2IRequest(model="wan2.7-image", prompt="scene", image="reference.png")),
 ])
 async def test_sandbox_empty_images_are_failures(route, payload):
     generator = MagicMock()

@@ -1,3 +1,6 @@
+import { Suspense } from "react";
+import LiveShell from "@/live/Shell";
+import "../live/styles.css";
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -22,7 +25,7 @@ export default function RootLayout({
       <body
         className="antialiased"
       >
-        {process.env.NEXT_PUBLIC_MUJIAN_CONCEPT ? <ConceptRoot variant={process.env.NEXT_PUBLIC_MUJIAN_CONCEPT as Variant}>{children}</ConceptRoot> : <AuthProvider><AppShell>{children}</AppShell></AuthProvider>}
+        {process.env.NEXT_PUBLIC_MUJIAN_CONCEPT ? <ConceptRoot variant={process.env.NEXT_PUBLIC_MUJIAN_CONCEPT as Variant}>{children}</ConceptRoot> : <AuthProvider>{process.env.NEXT_PUBLIC_MUJIAN_LEGACY === "1" ? <AppShell>{children}</AppShell> : <Suspense fallback={<p>正在打开幕间</p>}><LiveShell>{children}</LiveShell></Suspense>}</AuthProvider>}
       </body>
     </html>
   );

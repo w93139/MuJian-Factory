@@ -102,13 +102,14 @@ async def test_sandbox_passes_normalized_video_parameters():
     generator.generate_video.return_value = "https://example.test/video"
     with (
         patch("models.video_client.VideoClient", return_value=generator),
+        patch.object(sandbox, "_validated_media_reference", return_value="first.png"),
         patch.object(sandbox, "_start_active_task", return_value="task-1"),
         patch.object(sandbox, "_finish_active_task"),
         patch.object(sandbox, "_add_record", return_value="task-1"),
         patch.object(sandbox, "_converted_video_path", return_value="video.mp4"),
     ):
         result = await sandbox.sandbox_video(
-            SandboxVideoRequest(model="wan2.7-r2v", prompt="scene")
+            SandboxVideoRequest(model="wan2.7-i2v", prompt="scene", image="first.png")
         )
     assert result["success"] is True
     assert generator.generate_video.call_args.kwargs["duration"] == 5

@@ -5,7 +5,7 @@ const backendApiUrl = (process.env.BACKEND_API_URL || 'http://127.0.0.1:8000').r
 const nextConfig: NextConfig = {
   agentRules: false,
   output: 'standalone',
-  distDir: process.env.MUJIAN_E2E === '1' ? '.next-e2e' : '.next',
+  distDir: process.env.MUJIAN_DIST_DIR || (process.env.MUJIAN_LIVE_TEST === '1' ? '.next-live' : process.env.MUJIAN_E2E === '1' ? '.next-e2e' : '.next'),
   async rewrites() {
     return [
       {

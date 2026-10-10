@@ -46,6 +46,45 @@ def _validated_media_reference(value: str) -> str:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _media_parameters(req, model_type: str) -> dict:
+    """Validate explicit choices before any provider call; disclose legacy defaults."""
+    from models.config_model import ensure_model_available, model_type_capabilities
+    from models.video_params import normalize_video_params
+
+    try:
+        metadata = ensure_model_available(req.model)
+        if model_type not in metadata.get("type", []):
+            raise ValueError(f"模型不支持 {model_type} 工具")
+        capabilities = model_type_capabilities(model_type, metadata)
+        if model_type == "video":
+            ability = "first_frame_i2v" if req.image else "text_to_video"
+            if not capabilities.get("api_contract_verified") or ability not in capabilities.get("adapter_ability_types", []):
+                raise ValueError("当前模型未适配沙盒首帧图生视频" if req.image else "当前模型未适配纯文字视频生成，请选择支持首帧生成的模型并提供图片")
+            normalized = normalize_video_params(req.model, req.duration or 5, req.resolution, req.ratio)
+            values = {"duration": normalized.duration, "resolution": normalized.resolution, "ratio": normalized.ratio}
+            for key, actual in values.items():
+                requested = getattr(req, key)
+                if requested is not None and str(requested).casefold() != str(actual).casefold():
+                    raise ValueError(f"所选模型不支持 {key}={requested}，可用值请参考模型选项")
+            return values
+        values = {}
+        for key, default in (("ratio", "16:9"), ("resolution", "2K")):
+            requested = getattr(req, key)
+            choices = (capabilities.get("ratios", []) if key == "ratio" else capabilities.get("adapter_resolutions", capabilities.get("resolutions", []))) or []
+            if requested is not None and choices:
+                match = next((item for item in choices if item.casefold() == requested.casefold()), None)
+                if match is None:
+                    raise ValueError(f"所选模型不支持 {key}={requested}，支持：{', '.join(choices)}")
+                values[key] = match
+            elif requested is not None and not choices and key == "resolution":
+                raise ValueError("所选模型未声明可配置分辨率，请使用默认设置")
+            else:
+                values[key] = requested or (default if not choices or default in choices else choices[0])
+        return values
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _load_history() -> List[dict]:
     """加载历史记录"""
     with SANDBOX_LOCK:
@@ -334,7 +373,8 @@ async def sandbox_t2i(req: SandboxT2IRequest):
     """临时工作台 - 文生图"""
     from models.image_client import ImageClient
     client = ImageClient()
-    input_data = {"prompt": req.prompt, "style": req.style, "ratio": req.ratio}
+    parameters = _media_parameters(req, "t2i")
+    input_data = {"prompt": req.prompt, **parameters}
     task_id = _start_active_task("t2i", req.model, input_data)
     try:
         logger.info("Sandbox T2I started: model=%s ratio=%s", req.model, req.ratio)
@@ -343,7 +383,8 @@ async def sandbox_t2i(req: SandboxT2IRequest):
             req.prompt,
             model=req.model,
             image_paths=None,
-            video_ratio=req.ratio,
+            video_ratio=parameters["ratio"],
+            resolution=parameters["resolution"],
         )
         if not result:
             raise RuntimeError(f"图片生成没有返回结果: model={req.model}")
@@ -366,6 +407,7 @@ async def sandbox_t2i(req: SandboxT2IRequest):
         return {
             "success": True,
             "result": _converted_result_list(result if isinstance(result, list) else []),
+            "parameters": parameters,
             "record_id": record_id,
         }
     except Exception as e:
@@ -381,7 +423,8 @@ async def sandbox_i2i(req: SandboxI2IRequest):
     from models.image_client import ImageClient
     client = ImageClient()
     image = _validated_media_reference(req.image)
-    input_data = {"prompt": req.prompt, "reference_image": image}
+    parameters = _media_parameters(req, "i2i")
+    input_data = {"prompt": req.prompt, "reference_image": image, **parameters}
     task_id = _start_active_task("i2i", req.model, input_data)
     try:
         logger.info("Sandbox I2I started: model=%s ratio=%s", req.model, req.ratio)
@@ -390,7 +433,8 @@ async def sandbox_i2i(req: SandboxI2IRequest):
             req.prompt,
             image_paths=[image],
             model=req.model,
-            video_ratio=req.ratio,
+            video_ratio=parameters["ratio"],
+            resolution=parameters["resolution"],
         )
         if not result:
             raise RuntimeError(f"图片生成没有返回结果: model={req.model}")
@@ -412,6 +456,7 @@ async def sandbox_i2i(req: SandboxI2IRequest):
         return {
             "success": True,
             "result": _converted_result_list(result if isinstance(result, list) else []),
+            "parameters": parameters,
             "record_id": record_id,
         }
     except Exception as e:
@@ -425,10 +470,10 @@ async def sandbox_i2i(req: SandboxI2IRequest):
 async def sandbox_video(req: SandboxVideoRequest):
     """临时工作台 - 视频生成"""
     from models.video_client import VideoClient
-    from models.video_params import normalize_video_params
     client = VideoClient()
     image = _validated_media_reference(req.image) if req.image else None
-    input_data = {"prompt": req.prompt, "reference_image": image}
+    parameters = _media_parameters(req, "video")
+    input_data = {"prompt": req.prompt, "reference_image": image, **parameters}
     task_id = _start_active_task("video", req.model, input_data)
     try:
         # 生成唯一的保存路径
@@ -436,7 +481,6 @@ async def sandbox_video(req: SandboxVideoRequest):
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, f"{uuid.uuid4().hex[:8]}.mp4")
         logger.info("Sandbox video started: model=%s image=%s", req.model, bool(req.image))
-        normalized = normalize_video_params(req.model, 5, "720P", "16:9")
 
         result = await run_in_threadpool(
             client.generate_video,
@@ -444,9 +488,9 @@ async def sandbox_video(req: SandboxVideoRequest):
             image_path=image or "",
             save_path=save_path,
             model=req.model,
-            duration=normalized.duration,
-            video_ratio=normalized.ratio,
-            resolution=normalized.resolution,
+            duration=parameters["duration"],
+            video_ratio=parameters["ratio"],
+            resolution=parameters["resolution"],
             shot_type="multi",
         )
         # 保存到历史记录
@@ -463,6 +507,7 @@ async def sandbox_video(req: SandboxVideoRequest):
             "success": True,
             "result": result,
             "video_path": _converted_video_path(save_path),
+            "parameters": parameters,
             "record_id": record_id,
         }
     except Exception as e:

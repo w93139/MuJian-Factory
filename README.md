@@ -1,89 +1,54 @@
-# 幕间 · 光影叙事
+# 幕间 MuJian
 
-已选定「光影叙事」作为前端设计方向：黑白光影、动态线场、无标点大字与精简的制作界面。保留必要操作、参数、状态和权限提示。另两版保留为设计备选。
+AI 视频创作工作台。正式界面采用「光影叙事」，沿用原后端、认证权限、模型目录和媒体存储。当前已完成本次分镜与工具契约修复；付费生成效果与全部旧界面交互迁移尚未验收。
 
-## 预览选定设计
+## 三个版本
 
-```bash
-cd frontend
-npm ci
-cd ..
-uv run --with imageio-ffmpeg python scripts/generate-demo-media.py
-cd frontend
-npm run dev:director
-```
+统一项目位置：`/Users/syk/Desktop/MuJian/`。
 
-打开 http://127.0.0.1:3101 。生产方式预览可先执行 `npm run build:director`，再执行 `npm run start:director`。
+| 版本 | 源码与用途 | 启动 |
+| --- | --- | --- |
+| 正式集成版 | 根 `frontend/`、`backend/`、`deploy/`、`scripts/`；唯一继续开发和提交的仓库 | 见下文，默认光影真实接口界面 |
+| 旧版完整备份 | `旧版完整备份/`；改版前 0ab8dff，含 Git、隐藏配置、本地项目及媒体 | 在该目录按原 README 启动；恢复前先复制至另一个隔离位置，避免误写备份 |
+| 新前端设计版 | `新前端设计版/`；58b4a03 的独立设计源码，入口 `apps/director` | `cd 新前端设计版/frontend && npm run dev:director`；默认 3101，业务使用模拟数据 |
 
-这是可交互的本地演示前端，使用预置素材与浏览器本地状态，不调用模型或生产后端；示例视频由脚本生成，不提交到 Git。原项目真实后端入口继续使用 `npm run dev`。正式接入新设计仍需实现 API adapter，契约差异见 [接口复核](docs/business-contract-review.md)。
+两个保留版本不随正式代码同步覆盖，也不提交 GitHub。历史截图、日志、计划及 ZIP 位于 `.local-artifacts/`；历史 ZIP 不是当前交付版本。迁移来源未删除。
 
-备选入口：`npm run dev:guided`（3102）、`npm run dev:gallery`（3103）。[三版说明](docs/frontend-concepts.md) 包含完整范围，[设计参考映射](docs/reference-map-v3.md) 记录实际参考与源码来源。对比页的历史截图与验证日志只保存在本地，不纳入源码仓库。
+## 正式版本地运行
 
----
-
-以下保留原项目说明：
-
-# 幕间 Mujian
-
-幕间是从创意到成片的 AI 视频创作工作台，可把一句故事梗概制成短片，并以只读展示模式供面试官浏览。
-
-## 功能
-
-- **六阶段主流程**：剧本生成 → 角色与场景设计 → 分镜 → 参考图 → 视频片段 → 后期成片。「快速演示」预设将内容限定为一集、约 30 秒、720P。
-- **三条快捷流水线**：文艺短片、动作迁移、数字人口播。
-- **沙盒**：独立试用图片与视频模型，查看历史结果。
-- **展示模式**：管理员生成作品、标记示例并管理邀请码；面试官登录后只能浏览示例与已开放的历史，不能发起生成。
-- **费用保护**：按模型注册表价格预留图片和视频生成额度，限制每日估算金额与并发任务数。实际费用以模型平台账单为准。
-
-```mermaid
-flowchart LR
-    Browser[Next.js 前端] --> Nginx[Nginx]
-    Nginx --> API[FastAPI]
-    API --> Engine[工作流引擎]
-    Engine --> Agents[六阶段 Agent]
-    API --> Pipelines[快捷流水线与沙盒]
-    Agents --> Models[模型适配层]
-    Pipelines --> Models
-    Models --> DashScope[阿里云百炼]
-    Models --> Ark[火山方舟]
-    Models --> Compatible[OpenAI 兼容接口]
-    Engine --> JSON[本地 JSON 与媒体文件]
-```
-
-## 本地运行
-
-需要 Python 3.11、Node.js 20、npm、[uv](https://docs.astral.sh/uv/) 和 ffmpeg。也可以先运行 `scripts/install.sh` 安装依赖。
+需要 Node.js/npm、Python/uv 以及原后端运行依赖。保留现有私有配置，不将密钥写入仓库。
 
 ```bash
-cd backend
+cd /Users/syk/Desktop/MuJian/backend
 uv sync --python 3.11
-cp config.yaml.example config.yaml
-# 在本地 config.yaml 中填写所需 API Key
 uv run python api_server.py
 ```
 
-在另一个终端启动前端：
+另开终端：
 
 ```bash
-cd frontend
+cd /Users/syk/Desktop/MuJian/frontend
 npm ci
 npm run dev
 ```
 
-前端默认地址是 `http://127.0.0.1:3000`，后端健康检查是 `http://127.0.0.1:8000/api/health`。本地默认无需登录。模型默认值及平台地址在 `backend/config.yaml` 中设置；可用环境变量 `DASHSCOPE_API_KEY`、`ARK_API_KEY`、`OPENAI_COMPAT_API_KEY` 覆盖密钥。通用兼容接口只用于文本和视觉理解。`config.yaml` 和 `.env` 均被 Git 忽略。
+默认前端 `http://localhost:3000`，后端 `http://localhost:8000`。自定义后端时设置 `BACKEND_API_URL`；Next.js 代理配置需要在启动或构建时传入。公开模式沿用原管理员登录和体验码权限；具体环境配置与隔离预览见 [运行说明](docs/local-run.md)。
 
-运行全部检查：
+`NEXT_PUBLIC_MUJIAN_LEGACY=1 npm run dev` 可运行原业务界面以回归原有能力。`NEXT_PUBLIC_MUJIAN_CONCEPT=director` 是模拟设计模式，不用于真实业务验收。
+
+## 验证与交付
 
 ```bash
 ./scripts/check.sh
+cd frontend
+npx playwright test --config=playwright.live.config.ts
 ```
 
-## 部署与数据
+- [目录清单和迁移校验](docs/directory-inventory.md)
+- [实施计划与范围](docs/integration-plan.md)
+- [分镜和故事工作流契约](docs/contracts-workflow.md)
+- [工具与后端契约核查表](docs/contracts-tools.md)
+- [验证结果、限制及接入进度](docs/integration-report.md)
+- [本地运行和版本入口](docs/local-run.md)
 
-[部署手册](deploy/README.md)说明 Docker Compose、公开展示模式、邀请码、域名与 HTTPS。三服务分别是 `backend`、`frontend`、`nginx`。会话、产物、邀请码和用量记录保存在 `backend/code/`，不进入 Git；升级前请备份该目录。
-
-项目结构：`backend/` 包含 API、工作流、模型适配与 JSON 存储；`frontend/` 包含 Next.js 页面和前端回归测试；`deploy/` 包含 Nginx 配置与部署手册；`scripts/` 包含安装与检查脚本。[五分钟演示脚本](docs/demo-script.md)可用于面试展示。
-
-## 许可证
-
-本项目采用 [MIT 许可证](LICENSE)。所用第三方代码的必要版权与许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+原项目许可及第三方说明仍见 `LICENSE` 和 `THIRD_PARTY_NOTICES.md`。私有配置、数据、生成媒体、版本备份和本地归档均不随正式源码提交。

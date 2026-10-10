@@ -13,6 +13,7 @@ from api.services.project_helpers import (
 )
 from config import settings
 from core.orchestrator import STAGE_ORDER, WorkflowStage
+from core.storyboard_editing import StoryboardConflictError
 from quick_demo import quick_demo_video_model
 
 router = APIRouter(tags=["Workflow"])
@@ -234,6 +235,10 @@ async def update_artifact(session_id: str, stage: str, request: Request):
         return workflow_engine.update_artifact(session_id, stage, body if isinstance(body, dict) else {})
     except KeyError:
         raise HTTPException(404, "Session not found")
+    except StoryboardConflictError as exc:
+        raise HTTPException(409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, detail=str(exc)) from exc
 
 
 

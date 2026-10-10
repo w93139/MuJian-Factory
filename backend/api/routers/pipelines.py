@@ -19,7 +19,12 @@ from api.schemas.pipelines import (
 )
 from config import BASE_DIR
 from job_limits import job_limiter
-from models.config_model import get_models_by_type, model_type_capabilities
+from models.config_model import (
+    ensure_model_available,
+    get_models_by_type,
+    model_type_capabilities,
+    parse_api_model,
+)
 from pipelines.api_media import list_api_workflows
 from pipelines.events import task_event_stream
 from pipelines.runner import PIPELINE_REGISTRY, run_pipeline_task
@@ -98,9 +103,29 @@ def _render_preview_html(raw: str) -> str:
     return re.sub(r"\{\{\s*([^{}]+?)\s*\}\}", repl, raw)
 
 
+def _validate_standard_image_ratio(params: dict):
+    # Templates use their own exact media-slot dimensions. Share freeform
+    # validation across standard and its legacy quick_create entry point.
+    if params.get("subtitle_template"):
+        return
+    try:
+        image_model = params.get("image_model") or params.get("image_workflow")
+        if not isinstance(image_model, str):
+            raise ValueError("请选择有效的图片模型")
+        _, model = parse_api_model(image_model, "image")
+        metadata = ensure_model_available(model)
+        capabilities = model_type_capabilities("t2i", metadata)
+        if (params.get("video_ratio") or "9:16") not in capabilities.get("ratios", []):
+            raise ValueError("当前图片模型未适配所选画幅，请重新选择画幅")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 def _start_task(background_tasks: BackgroundTasks, pipeline: str, params: dict):
     if pipeline not in PIPELINE_REGISTRY:
         raise HTTPException(404, f"Pipeline not found: {pipeline}")
+    if pipeline == "standard":
+        _validate_standard_image_ratio(params)
     try:
         job_token = job_limiter.reserve()
     except RuntimeError as exc:

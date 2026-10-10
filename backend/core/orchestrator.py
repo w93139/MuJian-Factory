@@ -25,6 +25,13 @@ from core.agents import (
     VideoDirectorAgent,
     VideoEditorAgent,
 )
+from core.storyboard_editing import (
+    StoryboardConflictError,
+    edit_storyboard,
+    normalize_storyboard,
+    preserve_media_history,
+    reconcile_storyboard_media,
+)
 from error_messages import safe_error_text
 from job_limits import job_limiter
 from path_utils import absolute_path, stored_artifact_paths
@@ -204,7 +211,12 @@ class WorkflowEngine:
         """Return a deep-copied session snapshot from the unified in-memory state."""
         with self._state_lock:
             state = self.get_state(session_id)
-            return state.to_dict() if state else None
+            if not state:
+                return None
+            snapshot = state.to_dict()
+            if isinstance(snapshot["artifacts"].get("storyboard"), dict):
+                snapshot["artifacts"]["storyboard"] = normalize_storyboard(snapshot["artifacts"]["storyboard"])
+            return snapshot
 
     def get_artifact_snapshot(self, session_id: str, stage: str) -> Optional[Any]:
         """Return a deep-copied artifact snapshot from the unified in-memory state."""
@@ -213,6 +225,8 @@ class WorkflowEngine:
             if not state:
                 raise KeyError(f"Session not found: {session_id}")
             artifact = state.artifacts.get(stage)
+            if stage == "storyboard" and isinstance(artifact, dict):
+                return normalize_storyboard(artifact)
             return copy.deepcopy(artifact) if artifact is not None else None
 
     def update_session_meta(self, session_id: str, updates: Dict[str, Any], allowed_keys: tuple[str, ...]) -> Dict[str, Any]:
@@ -784,7 +798,7 @@ class WorkflowEngine:
                 return
             stage_key = stage.value
             if data.get("assets_preview"):
-                state.artifacts[stage_key] = copy.deepcopy(data["assets_preview"])
+                state.artifacts[stage_key] = preserve_media_history(state.artifacts.get(stage_key), copy.deepcopy(data["assets_preview"]))
 
             asset_update = data.get("asset_complete")
             if not isinstance(asset_update, dict):
@@ -924,7 +938,7 @@ class WorkflowEngine:
                         target_ids = self._background_regeneration_targets(stage, intervention)
                         payload = self._merge_item_regeneration_payload(state.artifacts.get(stage.value, {}), payload, keys, target_ids)
                     self._sync_artifacts_cross_stages(state, stage, payload)
-                    state.artifacts[stage.value] = payload
+                    state.artifacts[stage.value] = preserve_media_history(state.artifacts.get(stage.value), payload)
 
                 # 调试日志
                 logger.info(f"[execute_stage] stage={stage.value}, intervention={intervention is not None}, requires_intervention={result.get('requires_intervention')}, stage_completed={result.get('stage_completed')}")
@@ -1055,9 +1069,17 @@ class WorkflowEngine:
             if not state:
                 raise KeyError(f"Session not found: {session_id}")
 
-            self._apply_artifact_update(state, stage, body if isinstance(body, dict) else {})
-            self._recalculate_all_statuses(state)
-            self.save_session_to_disk(session_id)
+            previous_artifacts = copy.deepcopy(state.artifacts) if stage == "storyboard" else None
+            previous_status = copy.deepcopy(state.status)
+            try:
+                self._apply_artifact_update(state, stage, body if isinstance(body, dict) else {})
+                self._recalculate_all_statuses(state)
+                self.save_session_to_disk(session_id)
+            except Exception:
+                if previous_artifacts is not None:
+                    state.artifacts = previous_artifacts
+                    state.status = previous_status
+                raise
             return {
                 "status": "ok",
                 "status_map": copy.deepcopy(state.status),
@@ -1107,51 +1129,21 @@ class WorkflowEngine:
                     for current in current_items:
                         if isinstance(current, dict) and current.get("id") not in seen_ids:
                             merged_items.append(current)
+                    # A partial edit or version selection must not reorder clips: the
+                    # editor consumes this list in narrative order when assembling video.
+                    existing_order = {item.get("id"): index for index, item in enumerate(current_items) if isinstance(item, dict)}
+                    merged_items.sort(key=lambda item: existing_order.get(item.get("id"), len(current_items)))
                     body[list_key] = merged_items
 
-        if stage == "storyboard" and any(k in body for k in ("episodes", "segments", "shots")):
-            for shot in body.get('shots', []):
-                if isinstance(shot, dict) and 'is_new' in shot:
-                    shot['is_new'] = False
-
-            input_segments = list(body.get('segments', []))
-            for ep in body.get('episodes', []):
-                if isinstance(ep, dict):
-                    input_segments.extend(seg for seg in ep.get('segments', []) if isinstance(seg, dict))
-
-            seg_info_list = []
-            for seg in input_segments:
-                seg_id = seg.get('segment_id')
-                if not seg_id:
-                    continue
-                shots = seg.get('shots', [])
-                desc_video = " ".join([sh.get("plot") or sh.get("content") or "" for sh in shots]).strip()
-                total_dur = seg.get("total_duration") or sum([sh.get("duration", 0) for sh in shots]) or 10
-                seg_info_list.append({
-                    "segment_id": seg_id,
-                    "desc": desc_video,
-                    "duration": total_dur,
-                    "visual_prompt": seg.get("visual_prompt", ""),
-                })
-
-            video_art = state.artifacts.get('video_generation', {})
-            if isinstance(video_art, dict) and isinstance(video_art.get('clips'), list):
-                for clip in video_art['clips']:
-                    target = next((item for item in seg_info_list if item["segment_id"] == clip.get('id')), None)
-                    if target:
-                        clip['duration'] = target['duration']
-                        clip['description'] = target['desc']
-
-            ref_art = state.artifacts.get('reference_generation', {})
-            if isinstance(ref_art, dict) and isinstance(ref_art.get('scenes'), list):
-                for scene in ref_art['scenes']:
-                    target = next((item for item in seg_info_list if item["segment_id"] == scene.get('id')), None)
-                    if target and target.get("visual_prompt"):
-                        scene['description'] = target['visual_prompt']
-
-            if "segments" in body and "episodes" not in body:
-                body = {k: v for k, v in body.items() if k != "segments"}
-            body.pop('new_shot_ids', None)
+        if stage == "storyboard":
+            if state.session_id in self._active_sessions or any(value == "running" for value in state.status.values()):
+                raise StoryboardConflictError("工作流正在执行，请完成后再保存分镜")
+            storyboard = edit_storyboard(state.artifacts.get(stage, {}), body)
+            updated = copy.deepcopy(state.artifacts)
+            reconcile_storyboard_media(updated, storyboard, state.artifacts.get(stage, {}))
+            updated[stage] = storyboard
+            state.artifacts = updated
+            return
 
         elif stage == "reference_generation":
             if "segments" in body:
