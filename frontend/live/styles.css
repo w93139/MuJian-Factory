@@ -39,6 +39,10 @@
 .live .wave-stage {
   min-height: 640px;
 }
+/* The production shell has no inset canvas padding to cancel with demo margins. */
+.concept.live.landing .wave-stage {
+  margin-inline: 0;
+}
 .live .wave-hero-copy {
   position: relative;
   z-index: 2;

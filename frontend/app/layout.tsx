@@ -1,31 +1,26 @@
 import { Suspense } from "react";
-import LiveShell from "@/live/Shell";
-import "../live/styles.css";
 import type { Metadata } from "next";
+import LiveShell from "@/live/Shell";
 import AppShell from "@/components/AppShell";
 import { AuthProvider } from "@/components/AuthProvider";
+import "../live/styles.css";
 import "./globals.css";
-import "../concepts/styles.css";
-import "../concepts/visual-v3.css";
-import { ConceptRoot } from "@/concepts/App";
-import type { Variant } from "@/concepts/data";
+import "../ui/cinematic.css";
 
 export const metadata: Metadata = {
   title: "幕间",
   description: "AI视频生成工具",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body
-        className="antialiased"
-      >
-        {process.env.NEXT_PUBLIC_MUJIAN_CONCEPT ? <ConceptRoot variant={process.env.NEXT_PUBLIC_MUJIAN_CONCEPT as Variant}>{children}</ConceptRoot> : <AuthProvider>{process.env.NEXT_PUBLIC_MUJIAN_LEGACY === "1" ? <AppShell>{children}</AppShell> : <Suspense fallback={<p>正在打开幕间</p>}><LiveShell>{children}</LiveShell></Suspense>}</AuthProvider>}
+      <body className="antialiased">
+        <AuthProvider>
+          {process.env.NEXT_PUBLIC_MUJIAN_LEGACY === "1" ? <AppShell>{children}</AppShell> : (
+            <Suspense fallback={<p>正在打开幕间</p>}><LiveShell>{children}</LiveShell></Suspense>
+          )}
+        </AuthProvider>
       </body>
     </html>
   );

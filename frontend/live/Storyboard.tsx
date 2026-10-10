@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { Button, Field } from "@/concepts/ui";
+import { Button, Field } from "@/ui/controls";
 import { shotDescription, withShotDescription } from "@/lib/liveApi";
 import type { Artifact, Episode, Segment, Shot } from "@/lib/liveApi";
 

@@ -10,3 +10,8 @@ coverage/
 *.tsbuildinfo
 npm-debug.log*
 *.pem
+.next-*/
+playwright-report/
+test-results/
+e2e/
+live-tests/

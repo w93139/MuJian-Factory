@@ -10,13 +10,6 @@ import { apiFetch } from '@/lib/authApi';
 
 const STREAM_API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
-export interface StageInfo {
-  id: string;
-  name: string;
-  order: number;
-  description: string;
-}
-
 export interface ProjectStatus {
   session_id: string;
   current_stage: string;
@@ -142,13 +135,6 @@ async function requireOkResponse(response: Response, fallbackMessage: string): P
   const payload = await response.json().catch(() => null);
   const detail = typeof payload?.detail === 'string' ? payload.detail : fallbackMessage;
   throw new Error(`${detail} (HTTP ${response.status})`);
-}
-
-export async function fetchStages(): Promise<StageInfo[]> {
-  const resp = await apiFetch('/api/stages');
-  await requireOkResponse(resp, '获取工作流阶段失败');
-  const data = await resp.json();
-  return data.stages;
 }
 
 export async function fetchSessions(): Promise<any[]> {
@@ -300,15 +286,16 @@ export async function uploadProjectFile(file: File): Promise<{ file_path?: strin
 
 export async function patchStageArtifact(
   sessionId: string,
-  stage: 'reference_generation' | 'video_generation',
+  stage: string,
   values: Record<string, unknown>,
-): Promise<boolean> {
+): Promise<{ status: string }> {
   const response = await apiFetch(`/api/project/${sessionId}/artifact/${stage}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(values),
   });
-  return response.ok;
+  await requireOkResponse(response, '保存阶段内容失败');
+  return response.json();
 }
 
 export type SandboxTool = 'llm' | 'vlm' | 't2i' | 'i2i' | 'video';
@@ -432,17 +419,6 @@ export async function getArtifact(sessionId: string, stage: string): Promise<any
   return resp.json();
 }
 
-export async function checkSceneAssets(sessionId: string, sceneNumber: number): Promise<{
-  scene_number: number;
-  reference_images: number;
-  videos: number;
-  shot_count: number;
-}> {
-  const resp = await apiFetch(`/api/project/${sessionId}/scene/${sceneNumber}/assets`);
-  if (!resp.ok) return { scene_number: sceneNumber, reference_images: 0, videos: 0, shot_count: 0 };
-  return resp.json();
-}
-
 export async function executeStage(
   sessionId: string,
   stage: string,
@@ -507,19 +483,8 @@ export async function deleteSession(
   return resp.json();
 }
 
-export async function saveSelections(
-  sessionId: string,
-  stage: string,
-  selections: Record<string, any>,
-): Promise<{ status: string }> {
-  const resp = await apiFetch(`/api/project/${sessionId}/artifact/${stage}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(selections),
-  });
-  await requireOkResponse(resp, '保存选项失败');
-  return resp.json();
-}
+// Existing workflow callers share the same PATCH and error contract.
+export const saveSelections = patchStageArtifact;
 
 export async function continueWorkflow(sessionId: string): Promise<{ status: string; next_stage?: string }> {
   const resp = await apiFetch(`/api/project/${sessionId}/continue`, {

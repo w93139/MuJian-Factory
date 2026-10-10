@@ -34,16 +34,18 @@ npm run dev
 
 默认前端 `http://localhost:3000`，后端 `http://localhost:8000`。自定义后端时设置 `BACKEND_API_URL`；Next.js 代理配置需要在启动或构建时传入。公开模式沿用原管理员登录和体验码权限；具体环境配置与隔离预览见 [运行说明](docs/local-run.md)。
 
-`NEXT_PUBLIC_MUJIAN_LEGACY=1 npm run dev` 可运行原业务界面以回归原有能力。`NEXT_PUBLIC_MUJIAN_CONCEPT=director` 是模拟设计模式，不用于真实业务验收。
+`npm run dev` 默认正式光影界面；`NEXT_PUBLIC_MUJIAN_LEGACY=1 npm run dev` 保留原业务界面以回归原有能力。新界面经用户验收前，两者继续提供。正式源码已移除三套设计演示入口、模拟状态和未选方案；独立设计仍从 `新前端设计版/` 启动。
+
+版本回溯见 [版本保存与恢复](docs/version-recovery.md)。更新前有 checkpoint 标签，用户验收后才记录 accepted 标签；前后端成套保存，私有数据继续本地备份。
 
 ## 验证与交付
 
 ```bash
 ./scripts/check.sh
-cd frontend
-npx playwright test --config=playwright.live.config.ts
+# 已包括旧版回归、正式光影联调及演示代码隔离检查
 ```
 
+- [本轮前端瘦身与待验收说明](docs/frontend-cleanup.md)
 - [目录清单和迁移校验](docs/directory-inventory.md)
 - [实施计划与范围](docs/integration-plan.md)
 - [分镜和故事工作流契约](docs/contracts-workflow.md)

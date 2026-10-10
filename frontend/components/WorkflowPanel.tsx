@@ -894,11 +894,11 @@ export default function WorkflowPanel() {
 
   // ── 保存用户选择到服务端 ──
   const handleSaveSelections = async (stageId: string, selections: Record<string, any>): Promise<void> => {
-    if (!sessionId) return;
+    if (!sessionId) throw new Error('项目尚未加载，无法保存');
     try {
       // 构建更新: 把用户选择写回 artifact 中每个 item 的 selected 字段
       const art = stageStates[stageId]?.artifact;
-      if (!art) return;
+      if (!art) throw new Error('阶段内容尚未加载，无法保存');
 
       let patch: Record<string, any> = {};
       if (stageId === 'script_generation') {
@@ -939,13 +939,11 @@ export default function WorkflowPanel() {
         patch = { clips };
       }
 
-      // 本地更新
-      handleUpdateArtifact(stageId, patch);
-
-      // 服务端持久化
+      // 服务端保存成功后才更新本地，避免失败时把草稿或选版显示为已保存。
       await saveSelections(sessionId, stageId, patch);
+      handleUpdateArtifact(stageId, patch);
       // 保存成功后标记为已完成，顶栏显示对勾
-      updateStageState(stageId, { status: 'completed' });
+      updateStageState(stageId, { status: 'completed', error: null });
 
       // 如果是分镜阶段保存，刷���第3和第4阶段的 artifact
       console.log('[handleSaveSelections] stageId:', stageId, 'patch:', patch);
@@ -1020,7 +1018,7 @@ export default function WorkflowPanel() {
         console.log('[handleSaveSelections] 第5阶段已更新');
       }
     } catch (error) {
-      console.error('Save selections error:', error);
+      updateStageState(stageId, { error: error instanceof Error ? error.message : '保存失败，请重试' });
       throw error; // 抛出让 StageActions 捕获以恢复按钮状态
     }
   };

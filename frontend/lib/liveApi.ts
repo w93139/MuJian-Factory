@@ -2,7 +2,6 @@
 import {
   getProjectStatus,
   saveSelections,
-  getArtifact,
   intervene,
   parseStreamEvents,
   type ProjectStatus,
@@ -40,9 +39,6 @@ export interface Snapshot extends ProjectStatus {
 }
 export async function readProject(id: string): Promise<Snapshot> {
   return (await getProjectStatus(id)) as Snapshot;
-}
-export async function readStage(id: string, stage: string): Promise<Artifact> {
-  return (await getArtifact(id, stage)).artifact;
 }
 export async function saveStage(id: string, stage: string, patch: Artifact) {
   const values = structuredClone(patch);

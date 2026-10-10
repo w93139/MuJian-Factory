@@ -34,10 +34,23 @@ MUJIAN_DIST_DIR=.next-preview BACKEND_API_URL=http://127.0.0.1:18785 npm run dev
 - 旧版：`旧版完整备份/`。恢复应先复制备份到隔离位置，再运行其中原 README 的命令，不在备份上继续开发。
 - 独立光影设计：`新前端设计版/frontend` 执行 `npm run dev:director`（3101）；构建 `npm run build:director`，生产启动 `npm run start:director`。若默认端口已被原设计实例占用，先自行辨明实例，不终止用户其他进程。
 - 设计版自定义端口：完成 build:director 后，在 `新前端设计版/apps/director` 执行 `NEXT_PUBLIC_MUJIAN_CONCEPT=director ../../frontend/node_modules/.bin/next start --hostname 127.0.0.1 --port 3111`。该界面为模拟数据，不能用于真实接口验证。
-- 正式根保留原界面回归入口：`NEXT_PUBLIC_MUJIAN_LEGACY=1 npm run dev`。不要同时设置 CONCEPT。
+- 正式根保留原界面回归入口：`NEXT_PUBLIC_MUJIAN_LEGACY=1 npm run dev`。正式根不再提供 CONCEPT 模拟分支。
 
 ## 检查
 
-`./scripts/check.sh` 覆盖后端、静态检查、构建及原界面/工具浏览器回归。`cd frontend && npx playwright test --config=playwright.live.config.ts` 使用独立 18775/18776 端口，覆盖光影正式界面的真实 HTTP 闭环。默认回归使用 18765/18766，请避免同组并行占用。
+`./scripts/check.sh` 覆盖后端、静态检查、构建、演示依赖隔离检查、原界面/工具浏览器回归及正式光影真实接口联调。`cd frontend && npx playwright test --config=playwright.live.config.ts` 使用独立 18775/18776 端口，覆盖光影正式界面的真实 HTTP 闭环。默认回归使用 18765/18766，请避免同组并行占用。
 
 测试副本、日志、截图、trace 放在 `.local-artifacts/`，不提交。`MUJIAN_DIST_DIR` 用于预览构建目录隔离，避免开发服务与生产构建相互覆盖。
+
+## 新旧界面对比（保留到用户验收通过）
+
+沿用上面的隔离FastAPI（18785）。新界面3110命令不变；另开终端运行旧版操作界面：
+
+```bash
+cd /Users/syk/Desktop/MuJian/frontend
+NEXT_PUBLIC_MUJIAN_LEGACY=1 MUJIAN_DIST_DIR=.next-legacy-preview BACKEND_API_URL=http://127.0.0.1:18785 npm run dev -- --hostname 127.0.0.1 --port 3112
+```
+
+新界面 `http://127.0.0.1:3110`；旧界面 `http://127.0.0.1:3112`。共用合成测试数据，编辑后另一侧刷新可查看结果，不写原项目数据。独立设计3111只用于设计资料查看，不代表后端接入。
+
+用户明确验收前保留旧入口；自动检查通过不会自动停止旧服务。原始旧代码与修改前代码的恢复标签见 version-recovery.md。

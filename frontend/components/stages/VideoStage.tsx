@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Film, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, AlertTriangle, Play, Edit2, Save, X } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, AlertTriangle, Play, Edit2, Save, X } from 'lucide-react';
 import type { StageViewProps } from './types';
 import { assetUrl } from './utils';
 import { patchStageArtifact } from '@/lib/workflowApi';
@@ -28,11 +28,13 @@ function VideoGallery({
   selected,
   onSelect,
   showPlaceholder,
+  disabled = false,
 }: {
   versions: string[];
   selected: string;
   onSelect: (path: string) => void;
   showPlaceholder?: boolean;
+  disabled?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +79,18 @@ function VideoGallery({
           return (
             <div
               key={path}
-              onClick={() => onSelect(path)}
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              aria-label={`选择版本 ${i + 1}`}
+              aria-pressed={isSelected}
+              aria-disabled={disabled}
+              onClick={() => { if (!disabled) onSelect(path); }}
+              onKeyDown={event => {
+                if (event.target === event.currentTarget && !disabled && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  onSelect(path);
+                }
+              }}
               className={`flex-shrink-0 cursor-pointer rounded-lg overflow-hidden transition-all ${
                 isSelected
                   ? 'ring-3 ring-rose-500 shadow-lg shadow-rose-200'
@@ -134,6 +147,7 @@ function ClipRow({
   canEdit,
   disabled,
   isSaving,
+  isSelecting,
   allowMissingGenerate,
 }: {
   clip: ClipItem;
@@ -150,6 +164,7 @@ function ClipRow({
   canEdit?: boolean;
   disabled?: boolean;
   isSaving?: boolean;
+  isSelecting?: boolean;
   allowMissingGenerate?: boolean;
 }) {
   const isRunning = clip.status === 'running' || isRegenerating;
@@ -316,6 +331,7 @@ function ClipRow({
               versions={clip.versions}
               selected={clip.selected}
               onSelect={onSelectVersion}
+              disabled={isSelecting || isStageRunning}
               showPlaceholder={isRunning}
             />
             {isFailed && (
@@ -335,7 +351,7 @@ function ClipRow({
 }
 
 /* ─── 主组件 ─── */
-export default function VideoStage({ state, sessionId, onConfirm, onIntervene, onRegenerate, onUpdateArtifact, onSaveSelections, showConfirm, isRunning, referenceArtifact, hasPendingItems, hasNextStageStarted, scriptArtifact }: StageViewProps) {
+export default function VideoStage({ state, sessionId, onConfirm, onIntervene, onRegenerate, onUpdateArtifact, showConfirm, isRunning, referenceArtifact, hasPendingItems, hasNextStageStarted, scriptArtifact }: StageViewProps) {
   // 提取剧集标题映射
   const episodeTitleMap = React.useMemo(() => {
     const map: Record<number, string> = {};
@@ -388,6 +404,9 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
   const regenerationStartCounts = useRef<Record<string, number>>({});
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  const selectingRef = useRef(false);
+  const [isSelecting, setIsSelecting] = useState(false);
 
   // 当分镜数据变化时，初始化编辑描述
   useEffect(() => {
@@ -429,28 +448,28 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
     const newPrompt = editDescs[clipId];
     if (!newPrompt) return;
 
+    if (selectingRef.current || savingIds.has(clipId)) return;
+    setSaveErrors(prev => ({ ...prev, [clipId]: '' }));
     setSavingIds(prev => new Set(prev).add(clipId));
     try {
-      const saved = await patchStageArtifact(sessionId, 'video_generation', {
+      await patchStageArtifact(sessionId, 'video_generation', {
         [clipId]: { description: newPrompt }
       });
-      if (saved) {
-        // 更新前端缓存的 clips.description
-        if (onUpdateArtifact && state.artifact?.clips) {
-          const updatedClips = state.artifact.clips.map((c: ClipItem) =>
-            c.id === clipId ? { ...c, description: newPrompt } : c
-          );
-          onUpdateArtifact({ clips: updatedClips });
-        }
-        setEditingIds(prev => {
-          const next = new Set(prev);
-          next.delete(clipId);
-          return next;
-        });
-        setEditDescs(prev => ({ ...prev, [clipId]: newPrompt }));
+      // 更新前端缓存的 clips.description
+      if (onUpdateArtifact && state.artifact?.clips) {
+        const updatedClips = state.artifact.clips.map((c: ClipItem) =>
+          c.id === clipId ? { ...c, description: newPrompt } : c
+        );
+        onUpdateArtifact({ clips: updatedClips });
       }
+      setEditingIds(prev => {
+        const next = new Set(prev);
+        next.delete(clipId);
+        return next;
+      });
+      setEditDescs(prev => ({ ...prev, [clipId]: newPrompt }));
     } catch (error) {
-      console.error('保存提示词失败:', error);
+      setSaveErrors(prev => ({ ...prev, [clipId]: error instanceof Error ? error.message : '保存提示词失败，请重试' }));
     } finally {
       setSavingIds(prev => {
         const next = new Set(prev);
@@ -474,6 +493,7 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
   };
 
   const handleCancelEdit = (clipId: string) => {
+    setSaveErrors(prev => ({ ...prev, [clipId]: '' }));
     const clip = clips.find(item => item.id === clipId);
     setEditDescs(prev => ({ ...prev, [clipId]: clip?.description || '' }));
     setEditingIds(prev => {
@@ -491,20 +511,22 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
   };
 
   const handleSelectVersion = async (clipId: string, path: string) => {
-    setSelectedVersions(prev => ({ ...prev, [clipId]: path }));
-    // 同步更新 artifact 以便确认时能传递正确的选中片段给阶段6
-    if (onUpdateArtifact && state.artifact?.clips) {
-      const updatedClips = state.artifact.clips.map((c: ClipItem) =>
-        c.id === clipId ? { ...c, selected: path } : c
-      );
-      onUpdateArtifact({ clips: updatedClips });
-    }
-    // 自动保存选择
-    const selections: Record<string, string> = {};
-    clips.forEach(c => { selections[c.id] = selectedVersions[c.id] || c.selected; });
-    selections[clipId] = path;
-    if (onSaveSelections) {
-      await onSaveSelections(selections);
+    if (selectingRef.current || savingIds.size > 0 || isRunning) return;
+    selectingRef.current = true;
+    setIsSelecting(true);
+    setSaveErrors(prev => ({ ...prev, [clipId]: '' }));
+    try {
+      // The backend merges by stable item ID; never send other items' stale selections.
+      const result = await patchStageArtifact(sessionId, 'video_generation', {
+        clips: [{ id: clipId, selected: path }],
+      }) as { status: string; artifact?: Record<string, unknown> };
+      if (result.artifact) onUpdateArtifact?.(result.artifact);
+      setSelectedVersions(prev => ({ ...prev, [clipId]: path }));
+    } catch (error) {
+      setSaveErrors(prev => ({ ...prev, [clipId]: error instanceof Error ? error.message : '保存素材版本失败，请重试' }));
+    } finally {
+      selectingRef.current = false;
+      setIsSelecting(false);
     }
   };
 
@@ -525,6 +547,8 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
         {state.status === 'running' && (
           <StageProgress message={state.progressMessage} fallback="正在生成视频..." progress={state.progress} color="rose" />
         )}
+
+        {isSelecting && <p role="status" className="mb-3 text-sm text-gray-500">正在保存素材版本</p>}
 
         {state.error && (
           <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-4 rounded-xl mb-4">{state.error}</div>
@@ -572,6 +596,11 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
                                 未检测到首帧参考图，请先完成参考图生成
                               </div>
                             )}
+                          {saveErrors[clip.id] && (
+                            <div role="alert" className="mb-2 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+                              {saveErrors[clip.id]}。修改尚未保存，请重试。
+                            </div>
+                          )}
                             <ClipRow
                               clip={{ ...clip, selected: getSelected(clip) }}
                               editDesc={editDescs[clip.id]}
@@ -586,7 +615,8 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
                               isEditing={editingIds.has(clip.id)}
                               canEdit={canEdit}
                               disabled={!hasRef}
-                              isSaving={savingIds.has(clip.id)}
+                              isSaving={savingIds.has(clip.id) || isSelecting}
+                            isSelecting={isSelecting || savingIds.size > 0}
                               allowMissingGenerate={state.status !== 'pending'}
                             />
                           </div>
@@ -615,7 +645,7 @@ export default function VideoStage({ state, sessionId, onConfirm, onIntervene, o
         stageId="video_generation"
         hasPendingItems={hasPendingItems}
         hasNextStageStarted={hasNextStageStarted}
-        isRunning={isRunning}
+        isRunning={isRunning || isSelecting || savingIds.size > 0}
       />
     </div>
   );

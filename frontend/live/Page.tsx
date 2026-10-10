@@ -4,9 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Settings2 } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
-import { WaveScene } from "@/concepts/MotionScenes";
-import SpotlightCard from "@/concepts/reference/SpotlightCard";
-import { Button, Field } from "@/concepts/ui";
+import { WaveScene } from "@/ui/WaveScene";
+import SpotlightCard from "@/ui/reference/SpotlightCard";
+import { Button, Field } from "@/ui/controls";
 import {
   STYLES,
   VIDEO_GENERATION_MODES,

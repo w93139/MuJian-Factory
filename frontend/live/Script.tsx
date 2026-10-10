@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { Button, Field } from "@/concepts/ui";
+import { Button, Field } from "@/ui/controls";
 import type { Artifact } from "@/lib/liveApi";
 export default function Script({
   artifact: a,
@@ -67,9 +67,6 @@ export default function Script({
           与微剧 micro
           模式尚未实现，暂不可用。集数与快速短片时长仍按项目参数生效。
         </p>
-        <button disabled>选择梗概并确认</button>
-        <button disabled>电影 movie</button>
-        <button disabled>微剧 micro</button>
       </details>
       {(source.episodes || []).map((ep: any, i: number) => (
         <article

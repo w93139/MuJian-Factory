@@ -3,8 +3,8 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { STAGES, statusLabel, type Status } from "@/concepts/data";
-import { Button, Field } from "@/concepts/ui";
+import { STAGES, statusLabel, type Status } from "./stages";
+import { Button, Field } from "@/ui/controls";
 import {
   continueWorkflow,
   executeStage,

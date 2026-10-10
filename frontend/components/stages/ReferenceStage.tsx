@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Image as ImageIcon, RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus, Edit2, Save, X, Upload } from 'lucide-react';
+import { RefreshCw, ChevronLeft, ChevronRight, Loader, AlertCircle, ZoomIn, ImagePlus, Edit2, Save, X, Upload } from 'lucide-react';
 import type { StageViewProps } from './types';
 import { assetUrl, assetVersionLabel } from './utils';
 import { patchStageArtifact, uploadArtifactImage } from '@/lib/workflowApi';
@@ -28,11 +28,13 @@ function ImageGallery({
   selected,
   onSelect,
   showPlaceholder,
+  disabled = false,
 }: {
   versions: string[];
   selected: string;
   onSelect: (path: string) => void;
   showPlaceholder?: boolean;
+  disabled?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -78,7 +80,18 @@ function ImageGallery({
           return (
             <div
               key={path}
-              onClick={() => onSelect(path)}
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              aria-label={`选择版本 ${i + 1}`}
+              aria-pressed={isSelected}
+              aria-disabled={disabled}
+              onClick={() => { if (!disabled) onSelect(path); }}
+              onKeyDown={event => {
+                if (event.target === event.currentTarget && !disabled && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  onSelect(path);
+                }
+              }}
               className={`flex-shrink-0 cursor-pointer rounded-lg overflow-hidden transition-all ${
                 isSelected
                   ? 'ring-3 ring-emerald-500 shadow-lg shadow-emerald-200'
@@ -146,6 +159,8 @@ function SceneRow({
   onCancelEdit,
   onUploadImage,
   isUploading,
+  isSaving,
+  isSelecting,
 }: {
   scene: SceneItem;
   canEdit: boolean;
@@ -163,6 +178,8 @@ function SceneRow({
   onCancelEdit?: () => void;
   onUploadImage: (file: File) => void;
   isUploading?: boolean;
+  isSaving?: boolean;
+  isSelecting?: boolean;
 }) {
   const isRunning = scene.status === 'running' || isRegenerating;
   const isPending = scene.status === 'pending';
@@ -206,7 +223,7 @@ function SceneRow({
                 </button>
                 <button
                   onClick={onSavePrompt}
-                  disabled={!hasChanges}
+                  disabled={!hasChanges || isSaving}
                   className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
                     hasChanges
                       ? 'text-white bg-emerald-500 hover:bg-emerald-600'
@@ -214,7 +231,7 @@ function SceneRow({
                   }`}
                 >
                   <Save className="w-3 h-3" />
-                  保存
+                  {isSaving ? '保存中' : '保存'}
                 </button>
               </div>
             ) : (
@@ -328,6 +345,7 @@ function SceneRow({
               versions={scene.versions}
               selected={getSelected(scene)}
               onSelect={onSelectVersion}
+              disabled={isSelecting || isStageRunning}
               showPlaceholder={isRunning}
             />
             {isFailed && (
@@ -347,13 +365,16 @@ function SceneRow({
 }
 
 /* ─── 主组件 ─── */
-export default function ReferenceStage({ state, sessionId, onConfirm, onIntervene, onRegenerate, onUpdateArtifact, onSaveSelections, showConfirm, isRunning, hasPendingItems, hasNextStageStarted, scriptArtifact }: StageViewProps) {
+export default function ReferenceStage({ state, sessionId, onConfirm, onIntervene, onRegenerate, onUpdateArtifact, showConfirm, isRunning, hasPendingItems, hasNextStageStarted, scriptArtifact }: StageViewProps) {
   const [editDescs, setEditDescs] = useState<Record<string, string>>({});
   const [selectedVersions, setSelectedVersions] = useState<Record<string, string>>({});
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const regenerationStartCounts = useRef<Record<string, number>>({});
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  const selectingRef = useRef(false);
+  const [isSelecting, setIsSelecting] = useState(false);
   const [uploadingIds, setUploadingIds] = useState<Set<string>>(new Set());
 
   // 提取剧集标题映射
@@ -437,33 +458,33 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
     const newPrompt = editDescs[sceneId];
     if (!newPrompt) return;
 
+    if (selectingRef.current || savingIds.has(sceneId)) return;
+    setSaveErrors(prev => ({ ...prev, [sceneId]: '' }));
     setSavingIds(prev => new Set(prev).add(sceneId));
     try {
-      const saved = await patchStageArtifact(sessionId, 'reference_generation', {
+      await patchStageArtifact(sessionId, 'reference_generation', {
         segments: scenes.map(s => ({
           segment_id: s.id,
           visual_prompt: s.id === sceneId ? newPrompt : s.description
         }))
       });
-      if (saved) {
-        // 保存成功后关闭编辑模式
-        setEditingIds(prev => {
-          const next = new Set(prev);
-          next.delete(sceneId);
-          return next;
-        });
-        // 更新本地状态，使用保存后的值
-        setEditDescs(prev => ({ ...prev, [sceneId]: newPrompt }));
-        // 同步更新 artifact 以便后续阶段能获取最新的提示词
-        if (onUpdateArtifact && state.artifact?.scenes) {
-          const updatedScenes = state.artifact.scenes.map((s: SceneItem) =>
-            s.id === sceneId ? { ...s, description: newPrompt } : s
-          );
-          onUpdateArtifact({ scenes: updatedScenes });
-        }
+      // 保存成功后关闭编辑模式
+      setEditingIds(prev => {
+        const next = new Set(prev);
+        next.delete(sceneId);
+        return next;
+      });
+      // 更新本地状态，使用保存后的值
+      setEditDescs(prev => ({ ...prev, [sceneId]: newPrompt }));
+      // 同步更新 artifact 以便后续阶段能获取最新的提示词
+      if (onUpdateArtifact && state.artifact?.scenes) {
+        const updatedScenes = state.artifact.scenes.map((s: SceneItem) =>
+          s.id === sceneId ? { ...s, description: newPrompt } : s
+        );
+        onUpdateArtifact({ scenes: updatedScenes });
       }
     } catch (error) {
-      console.error('保存提示词失败:', error);
+      setSaveErrors(prev => ({ ...prev, [sceneId]: error instanceof Error ? error.message : '保存提示词失败，请重试' }));
     } finally {
       setSavingIds(prev => {
         const next = new Set(prev);
@@ -487,6 +508,7 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
   };
 
   const handleCancelEdit = (sceneId: string) => {
+    setSaveErrors(prev => ({ ...prev, [sceneId]: '' }));
     const scene = scenes.find(item => item.id === sceneId);
     setEditDescs(prev => ({ ...prev, [sceneId]: scene?.description || '' }));
     setEditingIds(prev => {
@@ -527,20 +549,22 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
   };
 
   const handleSelectVersion = async (sceneId: string, path: string) => {
-    setSelectedVersions(prev => ({ ...prev, [sceneId]: path }));
-    // 同步更新 artifact 以便确认时能传递正确的选中图片给阶段5
-    if (onUpdateArtifact && state.artifact?.scenes) {
-      const updatedScenes = state.artifact.scenes.map((s: SceneItem) =>
-        s.id === sceneId ? { ...s, selected: path } : s
-      );
-      onUpdateArtifact({ scenes: updatedScenes });
-    }
-    // 自动保存选择
-    const selections: Record<string, string> = {};
-    scenes.forEach(s => { selections[s.id] = selectedVersions[s.id] || s.selected; });
-    selections[sceneId] = path;
-    if (onSaveSelections) {
-      await onSaveSelections(selections);
+    if (selectingRef.current || savingIds.size > 0 || isRunning) return;
+    selectingRef.current = true;
+    setIsSelecting(true);
+    setSaveErrors(prev => ({ ...prev, [sceneId]: '' }));
+    try {
+      // The backend merges by stable item ID; never send other items' stale selections.
+      const result = await patchStageArtifact(sessionId, 'reference_generation', {
+        scenes: [{ id: sceneId, selected: path }],
+      }) as { status: string; artifact?: Record<string, unknown> };
+      if (result.artifact) onUpdateArtifact?.(result.artifact);
+      setSelectedVersions(prev => ({ ...prev, [sceneId]: path }));
+    } catch (error) {
+      setSaveErrors(prev => ({ ...prev, [sceneId]: error instanceof Error ? error.message : '保存素材版本失败，请重试' }));
+    } finally {
+      selectingRef.current = false;
+      setIsSelecting(false);
     }
   };
 
@@ -559,6 +583,8 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
         {state.status === 'running' && (
           <StageProgress message={state.progressMessage} fallback="正在生成参考图..." progress={state.progress} color="emerald" />
         )}
+
+        {isSelecting && <p role="status" className="mb-3 text-sm text-gray-500">正在保存素材版本</p>}
 
         {state.error && (
           <div className="text-sm text-red-600 bg-red-50 border border-red-200 p-4 rounded-xl mb-4">{state.error}</div>
@@ -597,6 +623,11 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
                     <div className="space-y-4">
                       {epScenes.map(scene => (
                         <div key={scene.id} className="relative">
+                          {saveErrors[scene.id] && (
+                            <div role="alert" className="mb-2 p-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg">
+                              {saveErrors[scene.id]}。修改尚未保存，请重试。
+                            </div>
+                          )}
                           <SceneRow
                             scene={scene}
                             editDesc={editDescs[scene.id] ?? scene.description}
@@ -614,6 +645,8 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
                             allowMissingGenerate={state.status !== 'pending'}
                             onUploadImage={file => handleUploadImage(scene.id, file)}
                             isUploading={uploadingIds.has(scene.id)}
+                            isSaving={savingIds.has(scene.id) || isSelecting}
+                            isSelecting={isSelecting || savingIds.size > 0}
                           />
                         </div>
                       ))}
@@ -640,7 +673,7 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
         stageId="reference_generation"
         hasPendingItems={hasPendingItems}
         hasNextStageStarted={hasNextStageStarted}
-        isRunning={isRunning}
+        isRunning={isRunning || isSelecting || savingIds.size > 0}
       />
     </div>
   );
