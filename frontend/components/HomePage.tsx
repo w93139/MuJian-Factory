@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Settings2, Clock, ArrowRight, CheckCircle, Trash2, Globe, ListOrdered, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
+import { WaveScene } from '@/ui/WaveScene';
 import { PROMPT_EXAMPLES } from '@/config/examples';
 import {
   STYLES,
@@ -48,6 +49,7 @@ interface HistoryItem {
 }
 
 interface HomePageProps {
+  cinematic?: boolean;
   onStartProject: (params: ProjectParams, autoMode?: boolean) => void;
   onResumeProject: (sessionId: string) => void;
   onDeleteSession: (sessionId: string) => Promise<void>;
@@ -78,7 +80,7 @@ function stageProgressLabel(statusMap?: Record<string, string>): { text: string;
   return { text: `已完成：${name} (${completed.length}/${STAGES.length})`, color: 'text-blue-600' };
 }
 
-export default function HomePage({ onStartProject, onResumeProject, onDeleteSession, onToggleShowcase, history }: HomePageProps) {
+export default function HomePage({ cinematic = false, onStartProject, onResumeProject, onDeleteSession, onToggleShowcase, history }: HomePageProps) {
   const [idea, setIdea] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState('realistic');
@@ -293,15 +295,18 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
   };
 
   return (
-    <div className="mj-home h-full flex flex-col items-center overflow-y-auto bg-gray-50/50">
+    <div className={clsx("mj-home h-full flex flex-col items-center overflow-y-auto bg-gray-50/50", cinematic && "cinematic-home")}>
+      {cinematic && <WaveScene />}
       {/* 主区域 - 居中 */}
       <div className="mj-home-main w-full max-w-6xl px-6 pt-16 pb-8 flex-shrink-0">
         {/* 标题 */}
         <div className="mj-hero-title text-center mb-10">
-          <div className="inline-flex items-center gap-2 mb-3">
-            <h1 className="text-2xl font-medium text-white">Hi，和幕间一起聊聊创作想法</h1>
-          </div>
-          <p className="text-sm text-white/75">幕间把一句创意变成可浏览、可编辑的 AI 短片创作流程。</p>
+          {cinematic ? <h1>故事的下一幕<br />由你想象</h1> : <>
+            <div className="inline-flex items-center gap-2 mb-3">
+              <h1 className="text-2xl font-medium text-white">Hi，和幕间一起聊聊创作想法</h1>
+            </div>
+            <p className="text-sm text-white/75">幕间把一句创意变成可浏览、可编辑的 AI 短片创作流程。</p>
+          </>}
         </div>
 
         <div aria-label="六阶段创作流程" className="mb-6 flex flex-wrap items-center justify-center gap-2 text-xs text-gray-500">
@@ -707,6 +712,7 @@ export default function HomePage({ onStartProject, onResumeProject, onDeleteSess
         </div>
       </div>
 
+      {cinematic && history.length === 0 && <p className="cinematic-empty-projects">还没有项目，先创建你的第一个故事</p>}
       {/* 历史记录区域 */}
       {history.length > 0 && (
         <div className="mj-history w-full max-w-6xl px-6 pb-12 flex-shrink-0">

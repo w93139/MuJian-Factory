@@ -779,3 +779,81 @@
     margin-top: 28px;
   }
 }
+
+/* Original workflow components share their interaction logic across both themes. */
+.concept.live .cinematic-workspace {
+  --lp-canvas-app: #080808;
+  --lp-surface: #171717;
+  --lp-surface-subtle: #202020;
+  --lp-surface-soft: #292929;
+  --lp-text-strong: #f2f2f2;
+  --lp-text-default: #e5e5e5;
+  --lp-text-inverse: #101010;
+  --lp-text-muted: #b5b5b5;
+  --lp-text-subtle: #a2a2a2;
+  --lp-text-disabled: #777;
+  --lp-action-primary: #ededed;
+  --lp-accent: #ededed;
+  --lp-accent-soft: #ffffff12;
+  --lp-border-subtle: #ffffff22;
+  --lp-border-divider: #ffffff19;
+  --lp-border-strong: #ffffff40;
+  --lp-surface-hover: #ffffff0d;
+  --lp-surface-active: #ffffff18;
+  --lp-surface-strong: #ffffff22;
+  --lp-border-medium: #ffffff30;
+}
+.concept.live .cinematic-workspace .mj-topbar:not(.mj-topbar-home) {
+  position: relative; inset: auto; width: 100%; height: auto;
+  min-height: 64px; flex-shrink: 0; gap: 10px;
+}
+.concept.live .cinematic-workspace .mj-topbar img { width: 32px; height: 32px; }
+.concept.live .cinematic-workspace .mj-topbar nav { min-width: 0; }
+.concept.live .cinematic-home { isolation: isolate; }
+.concept.live .cinematic-home > .wave-scene { position: absolute; inset: 0 0 auto; height: 760px; z-index: 0; }
+.concept.live .cinematic-home::before { content: none; }
+.concept.live .cinematic-home .mj-home-main { position: relative; z-index: 1; padding-top: 150px !important; }
+.concept.live .cinematic-home .mj-hero-title { text-align: center !important; margin-bottom: 38px !important; }
+.concept.live .cinematic-home .mj-hero-title h1 {
+  font-size: clamp(42px, 5.8vw, 80px) !important; line-height: 1.14;
+  font-weight: 360 !important; letter-spacing: -2px; text-shadow: 0 2px 20px #000b;
+}
+.concept.live .cinematic-home .mj-composer {
+  background: linear-gradient(135deg, #ffffff16, #0b0b0be8 60%, #73737320) !important;
+  backdrop-filter: blur(18px); border-color: #ffffff45 !important;
+}
+.concept.live .cinematic-workspace :is(.bg-purple-50, .bg-violet-50, .bg-indigo-50, .bg-blue-50, .bg-cyan-50, .bg-amber-50, .bg-emerald-50, .bg-green-50, .bg-white\/80, .bg-gray-50\/80) { background-color: #232323; }
+.concept.live .cinematic-workspace :is(.text-purple-900, .text-purple-800, .text-purple-700, .text-purple-600, .text-violet-700, .text-blue-700, .text-indigo-600, .text-cyan-600, .text-amber-900, .text-amber-800, .text-emerald-800, .text-green-700) { color: #ddd; }
+.concept.live .cinematic-workspace [class*="bg-gradient-to-"] { background-image: linear-gradient(135deg, #343434, #202020); color: #f2f2f2; }
+.concept.live .cinematic-workspace .bg-black { background-color: #ececec; color: #101010; }
+.concept.live .cinematic-workspace :is(table, td, th) { color: #ddd; }
+.concept.live .cinematic-workspace table { min-width: 600px; }
+.concept.live .cinematic-home .mj-composer-toolbar { flex-wrap: wrap; gap: 12px; }
+@media (max-width: 850px) {
+  .concept.live .cinematic-workspace .mj-topbar:not(.mj-topbar-home) { flex-wrap: wrap; padding: 12px; }
+  .concept.live .cinematic-workspace .mj-topbar nav { order: 3; flex-basis: 100%; }
+  .concept.live .cinematic-home .mj-home-main { padding: 100px 18px 30px !important; }
+  .concept.live .cinematic-home .mj-hero-title h1 { letter-spacing: -1px; }
+  .concept.live .cinematic-home .mj-composer-toolbar > div { flex-wrap: wrap; }
+}
+
+.concept.live .cinematic-workspace .mj-topbar + div { display: none; }
+.concept.live .cinematic-workspace :is(.stage-explanation, .episode-ordinal) { display: none; }
+.concept.live .cinematic-workspace .stage-explanation + * { margin-top: 24px; }
+.concept.live .cinematic-workspace :is(.text-purple-300, .text-purple-500, .text-violet-500, .text-orange-500, .text-cyan-500, .text-blue-500) { color: #bdbdbd; }
+.concept.live .cinematic-workspace button.border { border-width: 1px; border-style: solid; }
+.concept.live .cinematic-empty-projects { display: none; }
+.concept.live .cinematic-projects .cinematic-home > :is(.wave-scene, .mj-home-main) { display: none; }
+.concept.live .cinematic-projects .mj-history { padding-top: 32px; }
+.concept.live .cinematic-projects .cinematic-empty-projects { display: block; padding: 80px 20px; }
+
+.concept.live .cinematic-workspace:not(.cinematic-session) > .h-screen { height: auto; min-height: calc(100dvh - 80px); }
+.concept.live .cinematic-home .mj-home-main { pointer-events: none; }
+.concept.live .cinematic-home .mj-home-main > * { pointer-events: auto; }
+.concept.live .cinematic-home .wave-scene .motion-toggle { top: 24px; bottom: auto; right: 24px; }
+
+@media (max-width: 640px) {
+  .concept.live .cinematic-home .mj-generation-panel > .grid { grid-template-columns: minmax(0, 1fr); }
+  .concept.live .cinematic-home .mj-generation-panel label { min-width: 0; }
+  .concept.live .cinematic-home .mj-generation-panel label > .flex { flex-wrap: wrap; }
+}

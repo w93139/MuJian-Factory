@@ -463,10 +463,8 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
     setSavingIds(prev => new Set(prev).add(sceneId));
     try {
       await patchStageArtifact(sessionId, 'reference_generation', {
-        segments: scenes.map(s => ({
-          segment_id: s.id,
-          visual_prompt: s.id === sceneId ? newPrompt : s.description
-        }))
+        scenes: [{ id: sceneId, description: newPrompt, visual_prompt: newPrompt }],
+        segments: [{ segment_id: sceneId, visual_prompt: newPrompt }]
       });
       // 保存成功后关闭编辑模式
       setEditingIds(prev => {
@@ -479,7 +477,7 @@ export default function ReferenceStage({ state, sessionId, onConfirm, onInterven
       // 同步更新 artifact 以便后续阶段能获取最新的提示词
       if (onUpdateArtifact && state.artifact?.scenes) {
         const updatedScenes = state.artifact.scenes.map((s: SceneItem) =>
-          s.id === sceneId ? { ...s, description: newPrompt } : s
+          s.id === sceneId ? { ...s, description: newPrompt, visual_prompt: newPrompt } : s
         );
         onUpdateArtifact({ scenes: updatedScenes });
       }

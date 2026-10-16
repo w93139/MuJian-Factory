@@ -122,7 +122,7 @@ function getStageProgressSnapshot(status: any, stageId: string): Partial<StageSt
   };
 }
 
-export default function WorkflowPanel() {
+export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }: { cinematic?: boolean; homeNavigation?: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -133,6 +133,7 @@ export default function WorkflowPanel() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [projectParams, setProjectParams] = useState<ProjectParams | null>(null);
   const [autoMode, setAutoMode] = useState(false);
+  const [globalStatusMap, setGlobalStatusMap] = useState<Record<string, string>>({});
   // 用于顶栏流程图状态判断
   const [currentStageFromSession, setCurrentStageFromSession] = useState<string | null>(null);
   const [completedStagesFromSession, setCompletedStagesFromSession] = useState<string[]>([]);
@@ -141,6 +142,14 @@ export default function WorkflowPanel() {
   const stoppedRef = useRef(false);
   const autoModeRef = useRef(autoMode);
   const pollRef = useRef<Set<string>>(new Set());
+  const homeNavigationRef = useRef(homeNavigation);
+
+  // 主导航仅切换显示；保留正在运行的项目、自动模式和流连接。
+  useEffect(() => {
+    if (homeNavigationRef.current === homeNavigation) return;
+    homeNavigationRef.current = homeNavigation;
+    setActiveStage(null);
+  }, [homeNavigation]);
 
   useEffect(() => {
     autoModeRef.current = autoMode;
@@ -738,6 +747,33 @@ export default function WorkflowPanel() {
     }
   };
 
+  // 介入和分镜保存会同步后续阶段；统一采用后端完整快照，避免沿用旧产物或旧顶栏状态。
+  const refreshProjectSnapshot = async (sid: string) => {
+    const saved = await getProjectStatus(sid);
+    setGlobalStatusMap(saved.status || {});
+    setCurrentStageFromSession(saved.current_stage || null);
+    setCompletedStagesFromSession(Object.keys(saved.status || {}).filter(key =>
+      ['completed', 'session_completed'].includes(saved.status[key])
+    ));
+    setStageStates(prev => Object.fromEntries(Object.entries(prev).map(([key, value]) => {
+      const rawStatus = saved.status?.[key];
+      const status: StageStatus = rawStatus === 'session_completed' ? 'completed'
+        : rawStatus === 'failed' ? 'error'
+        : rawStatus === 'idle' ? 'pending'
+        : (rawStatus || value.status) as StageStatus;
+      return [key, {
+        ...value,
+        artifact: saved.artifacts?.[key] ?? value.artifact,
+        status,
+        ...getStageProgressSnapshot(saved, key),
+        ...(status === 'completed' ? { progress: 100, progressMessage: '已完成' } : {}),
+        error: status === 'error' ? (saved.error || value.error || '执行失败')
+          : status === 'stopped' ? '手动停止' : null,
+      }];
+    })));
+    return saved;
+  };
+
   // ── 用户介入修改 ──
   const handleIntervene = async (stageId: string, modifications: Record<string, any>) => {
     if (!sessionId) return;
@@ -779,9 +815,9 @@ export default function WorkflowPanel() {
         : undefined;
     if (!isBackgroundItemRegeneration) {
       setIsRunning(true);
-      updateStageState(stageId, { status: 'running', progress: 0, progressMessage: '处理中...', ...(artifactPatch ? { artifact: artifactPatch } : {}) });
-    } else if (artifactPatch) {
-      updateStageState(stageId, { artifact: artifactPatch });
+      updateStageState(stageId, { status: 'running', progress: 0, progressMessage: '处理中...', error: null, ...(artifactPatch ? { artifact: artifactPatch } : {}) });
+    } else {
+      updateStageState(stageId, { error: null, ...(artifactPatch ? { artifact: artifactPatch } : {}) });
     }
     try {
       const response = await intervene(sessionId, stageId, inputData);
@@ -861,19 +897,23 @@ export default function WorkflowPanel() {
               };
             });
           }
-        } else if (event.type === 'stage_complete') {
-          const artResult = await getArtifact(sessionId, stageId);
-          if (isBackgroundItemRegeneration) {
-            updateStageState(stageId, { artifact: artResult.artifact });
-          } else {
-            updateStageState(stageId, { artifact: artResult.artifact, status: 'waiting' });
-          }
         } else if (event.type === 'error') {
-          console.error('Intervention error:', event.content);
+          throw new Error(event.content || event.message || '处理失败，请重试');
         }
       }
-    } catch (error: any) {
-      console.error('Intervention error:', error);
+      await refreshProjectSnapshot(sessionId);
+    } catch (error: unknown) {
+      // 尽量恢复服务端状态（包括单卡失败和并发任务），同时保留本次操作的错误。
+      try { await refreshProjectSnapshot(sessionId); } catch { /* 网络断开时仍需解除前台运行状态 */ }
+      const message = error instanceof Error ? error.message : '处理失败，请重试';
+      updateStageState(stageId, {
+        ...(!isBackgroundItemRegeneration ? { status: 'error' as StageStatus } : {}),
+        error: message,
+        progressMessage: '执行失败',
+      });
+      if (!isBackgroundItemRegeneration) {
+        setGlobalStatusMap(prev => ({ ...prev, [stageId]: 'error' }));
+      }
     } finally {
       if (!isBackgroundItemRegeneration) {
         setIsRunning(false);
@@ -941,82 +981,17 @@ export default function WorkflowPanel() {
 
       // 服务端保存成功后才更新本地，避免失败时把草稿或选版显示为已保存。
       await saveSelections(sessionId, stageId, patch);
+      if (stageId === 'storyboard') {
+        // Keep the integrated editor's conflict checks and server-side media reconciliation.
+        await refreshProjectSnapshot(sessionId);
+        return;
+      }
+
       handleUpdateArtifact(stageId, patch);
       // 保存成功后标记为已完成，顶栏显示对勾
       updateStageState(stageId, { status: 'completed', error: null });
 
-      // 如果是分镜阶段保存，刷���第3和第4阶段的 artifact
-      console.log('[handleSaveSelections] stageId:', stageId, 'patch:', patch);
-      if (stageId === 'storyboard') {
-        // 更新本地 artifact 以清除 is_new 标记
-        handleUpdateArtifact(stageId, patch);
 
-        // 获取第4阶段当前已有 artifact
-        const oldRefArtifact = stageStates['reference_generation']?.artifact;
-        const oldScenes = (oldRefArtifact?.scenes || []) as any[];
-        const oldScenesMap = new Map(oldScenes.map((s: any) => [s.id, s]));
-
-        // 使用 segments 构建第4阶段 scenes 和第5阶段 clips
-        const sourceSegments = patch.segments || [];
-        console.log('[handleSaveSelections] sourceSegments:', sourceSegments);
-        
-        const newScenes = sourceSegments.map((seg: any, idx: number) => {
-          const seg_id = seg.segment_id;
-          const oldScene = oldScenesMap.get(seg_id) as any;
-          const isNew = seg.is_new;
-          
-          const shots = seg.shots || [];
-          const desc_ref = shots.map((sh: any) => sh.visual_prompt || sh.plot || sh.content || '').join(' ').trim();
-          
-          return {
-            id: seg_id,
-            name: `片段_${seg_id}`,
-            index: idx + 1,
-            description: desc_ref,
-            selected: isNew ? '' : (oldScene?.selected || ''),
-            versions: isNew ? [] : (oldScene?.versions || []),
-            status: isNew ? 'pending' : 'done',
-          };
-        });
-
-        // 更新第4阶段的 artifact
-        updateStageState('reference_generation', {
-          artifact: { session_id: sessionId, scenes: newScenes },
-          status: 'completed'
-        });
-
-        // 同步更新第5阶段（video_generation）
-        const oldVidArtifact = stageStates['video_generation']?.artifact;
-        const oldClips = (oldVidArtifact?.clips || []) as any[];
-        const oldClipsMap = new Map(oldClips.map((c: any) => [c.id, c]));
-
-        const newClips = sourceSegments.map((seg: any, idx: number) => {
-          const seg_id = seg.segment_id;
-          const oldClip = oldClipsMap.get(seg_id) as any;
-          
-          const shots = seg.shots || [];
-          const desc_video = shots.map((sh: any) => sh.plot || sh.content || '').join(' ').trim();
-          const total_dur = seg.total_duration || shots.reduce((acc: number, sh: any) => acc + (sh.duration || 0), 0) || 10;
-
-          return {
-            id: seg_id,
-            name: `片段_${seg_id}`,
-            index: idx + 1,
-            description: desc_video,
-            duration: total_dur,
-            selected: oldClip?.selected || '',
-            versions: oldClip?.versions || [],
-            status: 'pending',
-          };
-        });
-
-        // 更新第5阶段的 artifact
-        updateStageState('video_generation', {
-          artifact: { session_id: sessionId, clips: newClips },
-          status: 'completed'
-        });
-        console.log('[handleSaveSelections] 第5阶段已更新');
-      }
     } catch (error) {
       updateStageState(stageId, { error: error instanceof Error ? error.message : '保存失败，请重试' });
       throw error; // 抛出让 StageActions 捕获以恢复按钮状态
@@ -1267,7 +1242,6 @@ export default function WorkflowPanel() {
 
   // ── 计算 stageStatuses for TopBar ──
   // 直接根据后端返回的 status 数据计算图标状态
-  const [globalStatusMap, setGlobalStatusMap] = useState<Record<string, string>>({});
   
   const stageStatuses: Record<string, StageStatus> = {};
 
@@ -1406,6 +1380,7 @@ export default function WorkflowPanel() {
       <main className="flex-1 min-w-0 overflow-hidden">
         {showHome ? (
           <HomePage
+            cinematic={cinematic}
             onStartProject={handleStartProject}
             onResumeProject={handleResumeProject}
             onDeleteSession={handleDeleteSession}

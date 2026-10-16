@@ -9,10 +9,12 @@ import {
 import type { StageViewProps } from './types';
 import StageActions from './StageActions';
 import StageProgress from './StageProgress';
+import { shotDescription, withShotDescription } from '@/lib/liveApi';
 
 // ─── 类型定义 ───
 
-interface Shot {
+interface Shot extends Record<string, unknown> {
+  shot_id?: string;
   shot_number: number;
   shot_type: string;
   duration: number;
@@ -50,7 +52,8 @@ const SHOT_TYPE_DECOR = {
 export default function StoryboardStage({ 
   state, 
   onConfirm, 
-  onIntervene, 
+  onIntervene,
+  onSaveSelections,
   onRegenerate, 
   showConfirm, 
   isRunning, 
@@ -70,28 +73,47 @@ export default function StoryboardStage({
   const [editMode, setEditMode] = useState<'structured' | 'raw'>('structured');
   const [editEpisodes, setEditEpisodes] = useState<Episode[]>([]);
   const [rawJson, setRawJson] = useState('');
+  const [base, setBase] = useState<any>(null);
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   // ─── 编辑逻辑 ───
 
   const startEdit = useCallback(() => {
+    setBase(structuredClone(artifactData));
+    setSaveError('');
     setEditEpisodes(JSON.parse(JSON.stringify(episodes)));
     setRawJson(JSON.stringify(episodes, null, 2));
     setIsEditing(true);
     setEditMode('structured');
-  }, [episodes]);
+  }, [episodes, artifactData]);
 
   const cancelEdit = useCallback(() => setIsEditing(false), []);
 
-  const handleSave = useCallback(() => {
-    let finalEpisodes: Episode[];
-    if (editMode === 'raw') {
-      try { finalEpisodes = JSON.parse(rawJson); } catch { finalEpisodes = editEpisodes; }
-    } else {
-      finalEpisodes = editEpisodes;
-    }
-    onIntervene({ modified_storyboard: finalEpisodes });
-    setIsEditing(false);
-  }, [editMode, rawJson, editEpisodes, onIntervene]);
+  const handleSave = useCallback(async () => {
+    if (saving || isRunning) return;
+    setSaveError('');
+    setSaving(true);
+    try {
+      const finalEpisodes: Episode[] = editMode === 'raw' ? JSON.parse(rawJson) : editEpisodes;
+      if (!Array.isArray(finalEpisodes)) throw new Error('分镜 JSON 必须是剧集数组');
+      const normalized = finalEpisodes.map(ep => ({ ...ep, segments: ep.segments.map(seg => ({
+        ...seg, shots: seg.shots.map(shot => {
+          const old = episodes.flatMap(e => e.segments).find(s => s.segment_id === seg.segment_id)?.shots.find(h => shot.shot_id ? h.shot_id === shot.shot_id : h.shot_number === shot.shot_number);
+          return old && shot.content !== old.content
+            ? { ...shot, ...withShotDescription(shot, shot.content) }
+            : shot;
+        }),
+      })) }));
+      if (normalized.some(ep => ep.segments.some(seg => seg.shots.some(shot => !shotDescription(shot).trim() || !Number.isFinite(Number(shot.duration)) || Number(shot.duration) <= 0))))
+        throw new Error('请填写全部镜头描述，并设置大于零的时长');
+      if (onSaveSelections) await onSaveSelections({ episodes: normalized, expected_storyboard: base, user_modified: true });
+      else onIntervene({ modified_storyboard: normalized });
+      setIsEditing(false);
+    } catch (e) {
+      setSaveError(e instanceof SyntaxError ? 'JSON 格式有误，请检查后再保存' : e instanceof Error ? e.message : '保存失败');
+    } finally { setSaving(false); }
+  }, [saving, isRunning, editMode, rawJson, editEpisodes, episodes, base, onSaveSelections, onIntervene]);
 
   const switchEditMode = (mode: 'structured' | 'raw') => {
     if (mode === 'raw') {
@@ -118,7 +140,7 @@ export default function StoryboardStage({
       if (i !== epIdx) return ep;
       const newSegments = ep.segments.map((seg, j) => {
         if (j !== segIdx) return seg;
-        const newShots = seg.shots.map((shot, k) => k === shotIdx ? { ...shot, [field]: value } : shot);
+        const newShots = seg.shots.map((shot, k) => k === shotIdx ? { ...shot, ...(field === 'content' ? withShotDescription(shot, value) : { [field]: value }) } : shot);
         const newTotal = newShots.reduce((sum, s) => sum + (Number(s.duration) || 0), 0);
         return { ...seg, shots: newShots, total_duration: newTotal };
       });
@@ -131,7 +153,7 @@ export default function StoryboardStage({
       if (i !== epIdx) return ep;
       const newSegments = ep.segments.map((seg, j) => {
         if (j !== segIdx) return seg;
-        const newShot: Shot = { shot_number: seg.shots.length + 1, shot_type: '近景', duration: 5, content: '' };
+        const newShot: Shot = { shot_id: crypto.randomUUID(), shot_number: seg.shots.length + 1, shot_type: '近景', duration: 5, content: '' };
         return { ...seg, shots: [...seg.shots, newShot], total_duration: seg.total_duration + 5 };
       });
       return { ...ep, segments: newSegments };
@@ -182,7 +204,7 @@ export default function StoryboardStage({
         <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-6">
           <div className="flex min-w-0 flex-col">
             <h2 className="text-lg font-semibold text-gray-800">分镜设计</h2>
-            <p className="text-sm text-gray-500">
+            <p className="stage-explanation text-sm text-gray-500">
               生成分段分镜脚本 (景别·时长·叙事内容) 以及指导性的视觉流转设计
             </p>
           </div>
@@ -216,7 +238,7 @@ export default function StoryboardStage({
                 <button onClick={cancelEdit} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100">
                   <X className="w-3.5 h-3.5" />取消
                 </button>
-                <button onClick={handleSave} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-600">
+                <button disabled={saving || isRunning} onClick={handleSave} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-600">
                   <Save className="w-3.5 h-3.5" />保存
                 </button>
               </div>
@@ -224,6 +246,7 @@ export default function StoryboardStage({
           </div>
         </div>
 
+        {saveError && <p role="alert" className="live-error">{saveError}</p>}
         {/* 进度提示 */}
         {isRunning && state.progress < 100 && (
           <StageProgress message={state.progressMessage} progress={state.progress} color="violet" />
@@ -250,7 +273,7 @@ export default function StoryboardStage({
               const segs = episode.segments || [];
               const epTotalTime = segs.reduce((sum, s) => sum + (s.total_duration || 0), 0);
               return (
-                <div key={epIdx} className="space-y-4">
+                <div key={epIdx} data-testid="storyboard-episode" className="space-y-4">
                   {/* 一级：剧集抬头 (参考第一阶段) */}
                   <div className="flex items-center justify-between py-2 px-1 border-b border-gray-100">
                     <div className="flex items-center gap-3">
@@ -265,7 +288,7 @@ export default function StoryboardStage({
                   {/* 二级：拍摄分段 */}
                   <div className="space-y-8 pl-1">
                     {segs.map((segment, segIdx) => (
-                      <div key={segment.segment_id} className="space-y-3">
+                      <div key={segment.segment_id} data-segment-id={segment.segment_id} className="space-y-3">
                         <div className="flex items-center justify-between bg-gray-50/50 rounded-lg px-4 py-2 border border-gray-100">
                           <div className="flex items-center gap-6">
                             <span className="text-xs font-black text-gray-400">#{segment.segment_number}</span>
@@ -294,7 +317,7 @@ export default function StoryboardStage({
                         </div>
 
                         {/* 三级：分镜表格 */}
-                        <div className="ml-8 border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
+                        <div className="ml-0 sm:ml-8 border border-gray-100 rounded-xl overflow-x-auto shadow-sm bg-white">
                           <table className="w-full text-left">
                             <thead className="bg-gray-50/50 border-b border-gray-100">
                               <tr className="text-[12px] font-bold text-gray-500 uppercase tracking-wider">
@@ -309,7 +332,7 @@ export default function StoryboardStage({
                               {(segment.shots || []).map((shot, sIdx) => {
                                 const decor = SHOT_TYPE_DECOR[shot.shot_type as keyof typeof SHOT_TYPE_DECOR] || SHOT_TYPE_DECOR['近景'];
                                 return (
-                                  <tr key={sIdx} className="group hover:bg-gray-50/30 transition-colors">
+                                  <tr key={sIdx} data-testid="storyboard-shot" className="group hover:bg-gray-50/30 transition-colors">
                                     <td className="px-4 py-3 text-center text-xs font-mono text-gray-400">{shot.shot_number}</td>
                                     <td className="px-4 py-3 text-center">
                                       {isEditing ? (
@@ -328,7 +351,7 @@ export default function StoryboardStage({
                                       {isEditing ? (
                                         <input 
                                           type="number" 
-                                          value={shot.duration} 
+                                          aria-label={`镜头 ${shot.shot_number} 时长`} value={shot.duration}
                                           onChange={e => updateShotField(epIdx, segIdx, sIdx, 'duration', Number(e.target.value))} 
                                           className="w-12 bg-white border border-gray-200 rounded text-xs font-mono py-1 px-1 text-center focus:ring-1 focus:ring-violet-300 outline-none" 
                                         />
@@ -339,13 +362,13 @@ export default function StoryboardStage({
                                     <td className="px-4 py-3">
                                       {isEditing ? (
                                         <textarea 
-                                          value={shot.content} 
+                                          aria-label={`镜头 ${shot.shot_number} 描述`} value={shotDescription(shot)}
                                           onChange={e => updateShotField(epIdx, segIdx, sIdx, 'content', e.target.value)} 
                                           rows={1} 
                                           className="w-full bg-gray-50 border border-transparent rounded px-2 py-1 text-sm text-gray-700 focus:bg-white focus:border-violet-100 outline-none resize-none" 
                                         />
                                       ) : (
-                                        <p className="text-sm text-gray-700 leading-relaxed font-semibold">{shot.content}</p>
+                                        <p className="text-sm text-gray-700 leading-relaxed font-semibold">{shotDescription(shot)}</p>
                                       )}
                                     </td>
                                     {isEditing && (
@@ -388,7 +411,7 @@ export default function StoryboardStage({
         onSave={isEditing ? handleSave : undefined}
         onRegenerate={onRegenerate} 
         showConfirm={showConfirm} 
-        isRunning={isRunning} 
+        isRunning={isRunning || saving}
         hasPendingItems={hasPendingItems} 
         hasNextStageStarted={hasNextStageStarted}
         stageId="storyboard"

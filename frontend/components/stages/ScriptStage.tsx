@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useCallback } from 'react';
 import { Save, X, Code, LayoutList, Users, MapPin, Film, Sparkles, BookOpen, Lightbulb, Target, User, Crosshair, RefreshCw, Palette } from 'lucide-react';
@@ -212,7 +212,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
             </div>
           )}
         </div>
-        <p className="text-sm text-gray-500 mb-6">多轮 LLM 交互，生成结构化剧本数据</p>
+        <p className="stage-explanation text-sm text-gray-500 mb-6">多轮 LLM 交互，生成结构化剧本数据</p>
 
         {/* 运行中 - 进度条 & 已选 Logline & 增量生成结果 */}
         {state.status === 'running' && (
@@ -490,7 +490,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
                 <div key={i} className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   <div className="bg-gradient-to-r from-purple-50 to-white px-4 py-3 border-b border-purple-100 flex items-center justify-between">
                     <h4 className="font-bold text-purple-800">第 {ep.act_number || (i + 1)} 集：{ep.act_title}</h4>
-                    <span className="text-[10px] font-bold text-purple-300 bg-purple-50 px-2 py-0.5 rounded uppercase tracking-wider">Episode {ep.act_number || (i + 1)}</span>
+                    <span className="episode-ordinal text-[10px] font-bold text-purple-300 bg-purple-50 px-2 py-0.5 rounded uppercase tracking-wider">Episode {ep.act_number || (i + 1)}</span>
                   </div>
                   <div className="p-5 text-gray-700 whitespace-pre-wrap leading-relaxed text-[15px]">
                     {ep.content}

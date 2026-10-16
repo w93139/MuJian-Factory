@@ -11,6 +11,7 @@ import { apiFetch } from '@/lib/authApi';
 const STREAM_API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
 
 export interface ProjectStatus {
+  artifacts?: Record<string, any>;
   session_id: string;
   current_stage: string;
   status: Record<string, string>;

@@ -1,10 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { createContext, useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { Film } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { redirectForAnonymous } from "@/lib/authApi";
+export const HomeNavigationContext = createContext(0);
+
 const links = [
   ["/", "创作首页"],
   ["/?view=projects", "我的项目"],
@@ -14,6 +16,11 @@ const links = [
   ["/pipelines/digital-human", "数字人口播"],
 ];
 export default function LiveShell({ children }: { children: ReactNode }) {
+  const [homeNavigation, setHomeNavigation] = useState(0);
+  const handleHomeNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    setHomeNavigation(value => value + 1);
+  };
   const auth = useAuth(),
     path = usePathname(),
     q = useSearchParams();
@@ -33,7 +40,7 @@ export default function LiveShell({ children }: { children: ReactNode }) {
         跳到主要内容
       </a>
       <header className="live-header">
-        <Link className="brand" href="/">
+        <Link className="brand" href="/" onClick={handleHomeNavigation}>
           <span className="brand-symbol">
             <Film size={22} />
           </span>
@@ -43,7 +50,7 @@ export default function LiveShell({ children }: { children: ReactNode }) {
         </Link>
         <nav aria-label="主导航">
           {links.map(([href, label]) => (
-            <Link key={href} href={href}>
+            <Link key={href} href={href} onClick={href === "/" || href === "/?view=projects" ? handleHomeNavigation : undefined}>
               {label}
             </Link>
           ))}
@@ -71,7 +78,7 @@ export default function LiveShell({ children }: { children: ReactNode }) {
         ) : path === "/login" ||
           !auth.public_mode ||
           auth.role !== "anonymous" ? (
-          children
+          <HomeNavigationContext.Provider value={homeNavigation}>{children}</HomeNavigationContext.Provider>
         ) : (
           <p>正在打开登录页</p>
         )}
