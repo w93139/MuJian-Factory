@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -143,6 +143,8 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
   const autoModeRef = useRef(autoMode);
   const pollRef = useRef<Set<string>>(new Set());
   const homeNavigationRef = useRef(homeNavigation);
+  const resumeRequestRef = useRef(0);
+  const loadedSessionRef = useRef<string | null>(null);
 
   // 主导航仅切换显示；保留正在运行的项目、自动模式和流连接。
   useEffect(() => {
@@ -270,6 +272,9 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
       // 保存目标阶段，等会话加载完成后再设置
       const targetStage = stageParam && STAGE_ORDER.includes(stageParam) ? stageParam : null;
       handleResumeProject(sessionParam, targetStage);
+    } else {
+      resumeRequestRef.current++;
+      setActiveStage(null);
     }
   }, [searchParams]);
 
@@ -549,6 +554,7 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
         episodes: params.episodes,
         target_duration_seconds: params.target_duration_seconds,
       });
+      loadedSessionRef.current = result.session_id;
       setSessionId(result.session_id);
 
       // 添加到历史
@@ -776,7 +782,7 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
 
   // ── 用户介入修改 ──
   const handleIntervene = async (stageId: string, modifications: Record<string, any>) => {
-    if (!sessionId) return;
+    if (!sessionId) return false;
     const isBackgroundItemRegeneration =
       (stageId === 'character_design' && (
         Array.isArray(modifications.regenerate_characters) ||
@@ -821,7 +827,9 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
     }
     try {
       const response = await intervene(sessionId, stageId, inputData);
+      let completed = false;
       for await (const event of parseStreamEvents(response)) {
+        if (event.type === 'stage_complete') completed = true;
         if (event.type === 'progress') {
           if (!isBackgroundItemRegeneration) {
             updateStageState(stageId, {
@@ -901,7 +909,9 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
           throw new Error(event.content || event.message || '处理失败，请重试');
         }
       }
+      if (!completed) throw new Error('连接中断，未收到保存完成确认，请重试');
       await refreshProjectSnapshot(sessionId);
+      return true;
     } catch (error: unknown) {
       // 尽量恢复服务端状态（包括单卡失败和并发任务），同时保留本次操作的错误。
       try { await refreshProjectSnapshot(sessionId); } catch { /* 网络断开时仍需解除前台运行状态 */ }
@@ -914,6 +924,7 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
       if (!isBackgroundItemRegeneration) {
         setGlobalStatusMap(prev => ({ ...prev, [stageId]: 'error' }));
       }
+      return false;
     } finally {
       if (!isBackgroundItemRegeneration) {
         setIsRunning(false);
@@ -946,17 +957,18 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
         patch = selections;
       } else if (stageId === 'character_design') {
         const { _editDescs, ...restSelections } = selections;
-        const chars = (art.characters || []).map((c: any) => ({
-          ...c,
-          selected: restSelections[c.id] || c.selected,
-          description: _editDescs?.characters?.[c.id] ?? c.description,
-        }));
-        const sets = (art.settings || []).map((s: any) => ({
-          ...s,
-          selected: restSelections[s.id] || s.selected,
-          description: _editDescs?.settings?.[s.id] ?? s.description,
-        }));
-        patch = { characters: chars, settings: sets };
+        // Only send the edited IDs/fields: stale cards must not overwrite other saves.
+        const changedItems = (items: any[], descriptions?: Record<string, string>) => items
+          .filter(item => item.id in restSelections || (descriptions && item.id in descriptions))
+          .map(item => ({
+            id: item.id,
+            ...(item.id in restSelections ? { selected: restSelections[item.id] } : {}),
+            ...(descriptions && item.id in descriptions ? { description: descriptions[item.id] } : {}),
+          }));
+        patch = {
+          characters: changedItems(art.characters || [], _editDescs?.characters),
+          settings: changedItems(art.settings || [], _editDescs?.settings),
+        };
       } else if (stageId === 'storyboard') {
         // 分镜阶段：保存 shots 数据（排除 original_shots，只保留 artifact 需要的字段）
         const { original_shots, ...rest } = selections;
@@ -981,16 +993,8 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
 
       // 服务端保存成功后才更新本地，避免失败时把草稿或选版显示为已保存。
       await saveSelections(sessionId, stageId, patch);
-      if (stageId === 'storyboard') {
-        // Keep the integrated editor's conflict checks and server-side media reconciliation.
-        await refreshProjectSnapshot(sessionId);
-        return;
-      }
-
-      handleUpdateArtifact(stageId, patch);
-      // 保存成功后标记为已完成，顶栏显示对勾
-      updateStageState(stageId, { status: 'completed', error: null });
-
+      // Read the authoritative artifact/status, including cross-stage synchronization.
+      await refreshProjectSnapshot(sessionId);
 
     } catch (error) {
       updateStageState(stageId, { error: error instanceof Error ? error.message : '保存失败，请重试' });
@@ -1066,21 +1070,21 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
 
   // ── 恢复历史项目 ──
   const handleResumeProject = async (sid: string, targetStage: string | null = null) => {
+    const request = ++resumeRequestRef.current;
     // 如果正在执行的就是同一个项目，直接恢复视图，不重置状态
-    if (sid === sessionId) {
+    if (sid === sessionId && loadedSessionRef.current === sid) {
       const runningStage = STAGE_ORDER.find(s => stageStates[s]?.status === 'running');
       const waitingStage = STAGE_ORDER.find(s => stageStates[s]?.status === 'waiting');
       const lastCompleted = [...STAGE_ORDER].reverse().find(s => stageStates[s]?.status === 'completed');
-      setActiveStage(targetStage || runningStage || waitingStage || lastCompleted || STAGE_ORDER[0]);
+      setActiveStage(targetStage || runningStage || waitingStage || (STAGE_ORDER.includes(currentStageFromSession || "") ? currentStageFromSession : null) || lastCompleted || STAGE_ORDER[0]);
       return;
     }
 
     setSessionId(sid);
-    // 更新 URL 参数（包含阶段）
-    const stageParam = targetStage ? `&stage=${targetStage}` : '';
-    router.push(`/?session=${sid}${stageParam}`);
+    // Navigation owns the URL; this loader must not create another history entry.
     try {
       const status: any = await getProjectStatus(sid);
+      if (request !== resumeRequestRef.current) return;
       setGlobalStatusMap(status.status || {});
       const newStates = initStageStates();
       const stMap = status.status || {};
@@ -1146,6 +1150,7 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
         const restoredStartEndModel = s.video_start_end_model || defaultModels.video_start_end || '';
         const restoredReferenceModel = s.video_reference_model || defaultModels.video_reference || '';
         const restoredVideoMode = s.video_generation_mode || 'first_frame';
+        if (request !== resumeRequestRef.current) return;
         setProjectParams({
           idea: s.idea || s.user_textbox_input || '',
           style: s.style || '',
@@ -1170,8 +1175,10 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
       // 确定要显示的阶段（优先使用 URL 中的目标阶段）
       let finalStage = targetStage;
       if (!finalStage) {
-        finalStage = currentStage || (completedStages.length > 0 ? completedStages[completedStages.length - 1] : STAGE_ORDER[0]);
+        finalStage = STAGE_ORDER.includes(currentStage) ? currentStage : (STAGE_ORDER.filter(stage => completedStages.includes(stage)).at(-1) || STAGE_ORDER[0]);
       }
+      if (request !== resumeRequestRef.current) return;
+      loadedSessionRef.current = sid;
       setActiveStage(finalStage);
       setStageStates(newStates);
 
@@ -1181,7 +1188,8 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
           pollForCompletion(sid, stageId);
         }
       }
-    } catch {
+    } catch (error) {
+      if (request !== resumeRequestRef.current) return;
       setActiveStage(STAGE_ORDER[0]);
     }
   };
@@ -1382,7 +1390,7 @@ export default function WorkflowPanel({ cinematic = false, homeNavigation = 0 }:
           <HomePage
             cinematic={cinematic}
             onStartProject={handleStartProject}
-            onResumeProject={handleResumeProject}
+            onResumeProject={sid => router.push(`/?session=${encodeURIComponent(sid)}`)}
             onDeleteSession={handleDeleteSession}
             onToggleShowcase={handleToggleShowcase}
             history={history}

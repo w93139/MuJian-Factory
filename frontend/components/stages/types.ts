@@ -12,7 +12,7 @@ export interface StageViewProps {
   state: StageState;
   sessionId: string;
   onConfirm: () => void;
-  onIntervene: (modifications: Record<string, any>) => void;
+  onIntervene: (modifications: Record<string, any>) => void | Promise<boolean | void>;
   onRegenerate: () => void;
   onUpdateArtifact?: (patch: Record<string, any>) => void;
   onSaveSelections?: (selections: Record<string, any>) => Promise<void>;

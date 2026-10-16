@@ -57,13 +57,14 @@ type RunningTaskItem = {
   progress: number;
 };
 
-const WORKFLOW_STAGE_COUNT = 7;
+const WORKFLOW_STAGES = ['script_generation', 'character_design', 'storyboard', 'reference_generation', 'video_generation', 'post_production'];
+const WORKFLOW_STAGE_COUNT = WORKFLOW_STAGES.length;
 const COMPLETED_TASK_DISMISS_KEY = 'mujian_dismissed-completed-tasks';
 const SIDEBAR_OPEN_KEY = 'mujian_sidebar-open';
 
 function projectTaskFromSession(session: any): RunningTaskItem | null {
   const statusMap = session.status || {};
-  const values = Object.values(statusMap);
+  const values = WORKFLOW_STAGES.map(stage => statusMap[stage]);
   if (!values.includes('running')) return null;
   const completed = values.filter(value => ['completed', 'session_completed'].includes(String(value))).length;
   const runningStage = Object.keys(statusMap).find(key => statusMap[key] === 'running');
@@ -80,7 +81,7 @@ function projectTaskFromSession(session: any): RunningTaskItem | null {
 function projectReviewTaskFromSession(session: any): RunningTaskItem | null {
   const statusMap = session.status || {};
   const waitingStage = Object.keys(statusMap).find(key => statusMap[key] === 'waiting');
-  const completed = Object.values(statusMap).filter(value => ['completed', 'session_completed'].includes(String(value))).length;
+  const completed = WORKFLOW_STAGES.map(stage => statusMap[stage]).filter(value => ['completed', 'session_completed'].includes(String(value))).length;
   const allDone = completed >= WORKFLOW_STAGE_COUNT || statusMap.completed === 'completed';
   if (!waitingStage && !allDone) return null;
   const targetStage = waitingStage || Object.keys(statusMap).reverse().find(key => ['completed', 'session_completed'].includes(String(statusMap[key]))) || '';
@@ -234,7 +235,7 @@ function TaskPanel({
   );
 }
 
-function SidebarTaskPanels({ currentPath }: { currentPath: string }) {
+export function SidebarTaskPanels({ currentPath }: { currentPath: string }) {
   const router = useRouter();
   const [runningTasks, setRunningTasks] = useState<RunningTaskItem[]>([]);
   const [completedTasks, setCompletedTasks] = useState<RunningTaskItem[]>([]);

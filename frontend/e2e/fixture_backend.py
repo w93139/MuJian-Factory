@@ -1,6 +1,7 @@
 """Run a real public-mode API against a disposable copy of the backend."""
 
 import os
+import copy
 import json
 import shutil
 import signal
@@ -47,6 +48,28 @@ def seed_live_sessions(session_dir):
           "video_generation":{"clips":[{"id":"seg_01_01","name":"窗边视频","selected":clip,"versions":[clip,clip+"?version=2"],"status":"done"}]}},
           "meta":{"idea":"接口联调短片"},"showcase":True}
         (session_dir/(sid+".json")).write_text(json.dumps(data,ensure_ascii=False))
+
+
+    for sid in ('parity-script', 'parity-role', 'parity-role-failure'):
+        extra = copy.deepcopy(data)
+        extra['session_id'] = sid
+        extra['artifacts']['script_generation'].pop('new_episodes', None)
+        extra['artifacts']['script_generation']['characters'] = [
+            {'character_id': 'c1', 'name': '旅人', 'description': '原角色描述', 'personality': [], 'role': '主角'},
+            {'character_id': 'c2', 'name': '路人', 'description': '待生成描述', 'personality': [], 'role': '配角'},
+        ]
+        extra['artifacts']['script_generation']['settings'] = [
+            {'setting_id': 's1', 'name': '车站', 'description': '原场景描述'},
+        ]
+        extra['artifacts']['character_design'] = {'characters': [
+            {'id': 'c1', 'name': '旅人', 'description': '原角色描述', 'selected': ref, 'versions': [ref, ref+'?version=2'], 'custom': 'keep', 'status': 'done'},
+            {'id': 'c2', 'name': '路人', 'description': '待生成描述', 'selected': '', 'versions': [], 'status': 'pending'},
+        ], 'settings': [
+            {'id': 's1', 'name': '车站', 'description': '原场景描述', 'selected': ref, 'versions': [ref, ref+'?version=2'], 'status': 'done'},
+        ]}
+        extra['status']['character_design'] = 'waiting'
+        extra['current_stage'] = 'character_design'
+        (session_dir/(sid+'.json')).write_text(json.dumps(extra,ensure_ascii=False))
 
 
 def main() -> int:

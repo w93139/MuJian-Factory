@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { createContext, useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { SidebarTaskPanels } from "@/components/AppShell";
 import { Film } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { redirectForAnonymous } from "@/lib/authApi";
@@ -24,6 +25,7 @@ export default function LiveShell({ children }: { children: ReactNode }) {
   const auth = useAuth(),
     path = usePathname(),
     q = useSearchParams();
+  const showTasks = !auth.loading && !auth.error && path !== '/login' && (!auth.public_mode || auth.role !== 'anonymous');
   const landing = path === "/" && !q.get("session") && !q.get("view");
   useEffect(() => {
     if (
@@ -67,6 +69,7 @@ export default function LiveShell({ children }: { children: ReactNode }) {
           {!auth.canEdit && auth.role === "guest" && <span>只读展示</span>}
         </div>
       </header>
+      <div className={`live-workspace${showTasks ? " has-task-panels" : ""}`}>
       <main id="main-content" className="live-main">
         {auth.error ? (
           <div className="live-error" role="alert">
@@ -83,6 +86,12 @@ export default function LiveShell({ children }: { children: ReactNode }) {
           <p>正在打开登录页</p>
         )}
       </main>
+      {showTasks && (
+        <aside className="live-task-panels" aria-label="任务列表">
+          <SidebarTaskPanels currentPath={path} />
+        </aside>
+      )}
+      </div>
     </div>
   );
 }

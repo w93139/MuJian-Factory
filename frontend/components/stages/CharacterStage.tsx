@@ -78,6 +78,8 @@ function ImageGallery({
           return (
             <div
               key={path}
+              role="button" tabIndex={0} aria-label={`选择版本 ${i + 1}`} aria-pressed={isSelected}
+              onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(path); } }}
               onClick={() => onSelect(path)}
               className={`flex-shrink-0 cursor-pointer rounded-lg overflow-hidden transition-all ${
                 isSelected
@@ -144,6 +146,7 @@ function AssetRow({
   isStageRunning,
   isRegenerating,
   isUploading,
+  isSaving,
 }: {
   asset: AssetVersion;
   type: 'character' | 'setting';
@@ -159,6 +162,7 @@ function AssetRow({
   isStageRunning?: boolean;
   isRegenerating?: boolean;
   isUploading?: boolean;
+  isSaving?: boolean;
 }) {
   const isRunning = asset.status === 'running' || isRegenerating;
   const isPending = asset.status === 'pending';
@@ -168,7 +172,7 @@ function AssetRow({
   const canShowRegenerate = !isRunning && !isPending && (hasImage || isFailed || canGenerateMissing);
 
   return (
-    <div className={`flex flex-col xl:flex-row border rounded-xl overflow-hidden bg-white ${
+    <div data-asset-id={asset.id} aria-busy={isSaving} className={`flex flex-col xl:flex-row border rounded-xl overflow-hidden bg-white ${
       isFailed ? 'border-red-200' : 'border-gray-200'
     }`}>
       {/* 左侧: 描述 */}
@@ -192,13 +196,13 @@ function AssetRow({
             isEditing ? (
               <div className="ml-auto flex gap-1">
                 <button
-                  onClick={onCancelEdit}
+                  disabled={isSaving} onClick={onCancelEdit}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-100"
                 >
                   <X className="w-3 h-3" />取消
                 </button>
                 <button
-                  onClick={onSaveEdit}
+                  disabled={isSaving} onClick={onSaveEdit}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-white bg-violet-500 hover:bg-violet-600"
                 >
                   <Save className="w-3 h-3" />保存
@@ -206,7 +210,7 @@ function AssetRow({
               </div>
             ) : (
               <button
-                onClick={onToggleEdit}
+                disabled={isSaving || isUploading} onClick={onToggleEdit}
                 className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors"
               >
                 <Edit2 className="w-3 h-3" />修改
@@ -217,6 +221,8 @@ function AssetRow({
         {isFailed && <ErrorDetails error={asset.error} className="mb-3" />}
         {isEditing ? (
           <textarea
+            aria-label={`${asset.name}描述`}
+            disabled={isSaving}
             value={editDesc}
             onChange={e => onDescChange(e.target.value)}
             rows={5}
@@ -230,7 +236,7 @@ function AssetRow({
         <div className="mt-3 flex flex-wrap items-center gap-2">
           {canShowRegenerate && (
             <button
-              onClick={onRegenerate}
+              disabled={isSaving || isUploading} onClick={onRegenerate}
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 isFailed
                   ? 'text-red-600 bg-red-50 hover:bg-red-100'
@@ -252,7 +258,7 @@ function AssetRow({
               type="file"
               accept="image/*"
               className="hidden"
-              disabled={isUploading}
+              disabled={isUploading || isSaving}
               onChange={e => {
                 const file = e.target.files?.[0];
                 e.currentTarget.value = '';
@@ -282,7 +288,7 @@ function AssetRow({
                   {!isRunning && (
                     <button
                       onClick={onRegenerate}
-                      disabled={isRegenerating}
+                      disabled={isRegenerating || isSaving || isUploading}
                       className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors disabled:text-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <RefreshCw className="w-2.5 h-2.5" />
@@ -297,7 +303,7 @@ function AssetRow({
                   {canGenerateMissing && (
                     <button
                       onClick={onRegenerate}
-                      disabled={isRegenerating}
+                      disabled={isRegenerating || isSaving || isUploading}
                       className="mt-1 inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 transition-colors disabled:text-gray-400 disabled:bg-gray-100 disabled:cursor-not-allowed"
                     >
                       <RefreshCw className="w-2.5 h-2.5" />
@@ -313,12 +319,12 @@ function AssetRow({
             <ImageGallery
               versions={asset.versions}
               selected={asset.selected}
-              onSelect={onSelectVersion}
+              onSelect={path => { if (!isSaving && !isUploading) onSelectVersion(path); }}
               showPlaceholder={isRunning}
             />
             {isFailed && (
               <button
-                onClick={onRegenerate}
+                disabled={isSaving || isUploading} onClick={onRegenerate}
                 className="absolute top-1 right-1 z-10 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium text-white bg-red-500/80 hover:bg-red-600 shadow transition-colors"
               >
                 <RefreshCw className="w-2.5 h-2.5" />
@@ -340,8 +346,9 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
   const [editChars, setEditChars] = useState<Record<string, string>>({});
   const [editSets, setEditSets] = useState<Record<string, string>>({});
   // 跟踪前端选择的版本（覆盖后端返回的 selected）
-  const [selectedChars, setSelectedChars] = useState<Record<string, string>>({});
-  const [selectedSets, setSelectedSets] = useState<Record<string, string>>({});
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const [saveError, setSaveError] = useState('');
+  const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const regenerationStartCounts = useRef<Record<string, number>>({});
   const [editingIds, setEditingIds] = useState<Set<string>>(new Set());
@@ -373,12 +380,10 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
   const hasSets = settingsData.length > 0;
 
   const startEdit = useCallback((id: string) => {
-    const cd: Record<string, string> = {};
-    characters.forEach(c => { cd[c.id] = c.description; });
-    setEditChars(cd);
-    const sd: Record<string, string> = {};
-    settingsData.forEach(s => { sd[s.id] = s.description; });
-    setEditSets(sd);
+    const char = characters.find(item => item.id === id);
+    const setting = settingsData.find(item => item.id === id);
+    if (char) setEditChars(prev => ({ ...prev, [id]: char.description }));
+    if (setting) setEditSets(prev => ({ ...prev, [id]: setting.description }));
     setEditingIds(prev => new Set(prev).add(id));
   }, [characters, settingsData]);
 
@@ -390,16 +395,23 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
     });
   };
 
+  const persist = (id: string, patch: Record<string, any>, onSuccess?: () => void) => {
+    setSavingIds(prev => new Set(prev).add(id));
+    setSaveError('');
+    const next = saveQueue.current.then(async () => {
+      if (!onSaveSelections) throw new Error('保存接口尚未就绪');
+      await onSaveSelections(patch);
+      onSuccess?.();
+    });
+    saveQueue.current = next.catch(() => {});
+    void next.catch(error => setSaveError(error instanceof Error ? error.message : '保存失败，请重试'))
+      .finally(() => setSavingIds(prev => { const ids = new Set(prev); ids.delete(id); return ids; }));
+  };
+
   const saveEdit = (id: string) => {
-    const selections: Record<string, any> = {};
-    characters.forEach(c => { selections[c.id] = selectedChars[c.id] || c.selected; });
-    settingsData.forEach(s => { selections[s.id] = selectedSets[s.id] || s.selected; });
-    selections._editDescs = {
-      characters: id in editChars ? { [id]: editChars[id] } : {},
-      settings: id in editSets ? { [id]: editSets[id] } : {},
-    };
-    onSaveSelections?.(selections);
-    cancelEdit(id);
+    const type = characters.some(item => item.id === id) ? 'characters' : 'settings';
+    const value = type === 'characters' ? editChars[id] : editSets[id];
+    persist(id, { _editDescs: { [type]: { [id]: value } } }, () => cancelEdit(id));
   };
 
   const handleUploadImage = async (type: 'characters' | 'settings', id: string, file: File) => {
@@ -412,14 +424,6 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
           characters: artifact.characters || [],
           settings: artifact.settings || [],
         });
-      }
-      if (artifact?.characters) {
-        const char = artifact.characters.find((item: AssetVersion) => item.id === id);
-        if (char?.selected) setSelectedChars(prev => ({ ...prev, [id]: char.selected }));
-      }
-      if (artifact?.settings) {
-        const setting = artifact.settings.find((item: AssetVersion) => item.id === id);
-        if (setting?.selected) setSelectedSets(prev => ({ ...prev, [id]: setting.selected }));
       }
     } catch (error) {
       console.error('上传图片失败:', error);
@@ -444,35 +448,12 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
     }
   };
 
-  const handleSelectCharVersion = async (id: string, path: string) => {
-    setSelectedChars(prev => ({ ...prev, [id]: path }));
-    // 自动保存选择
-    const selections: Record<string, string> = {};
-    characters.forEach(c => { selections[c.id] = selectedChars[c.id] || c.selected; });
-    selections[id] = path;
-    settingsData.forEach(s => { selections[s.id] = selectedSets[s.id] || s.selected; });
-    if (onSaveSelections) {
-      await onSaveSelections(selections);
-    }
-  };
-
-  const handleSelectSetVersion = async (id: string, path: string) => {
-    setSelectedSets(prev => ({ ...prev, [id]: path }));
-    // 自动保存选择
-    const selections: Record<string, string> = {};
-    characters.forEach(c => { selections[c.id] = selectedChars[c.id] || c.selected; });
-    settingsData.forEach(s => { selections[s.id] = selectedSets[s.id] || s.selected; });
-    selections[id] = path;
-    if (onSaveSelections) {
-      await onSaveSelections(selections);
-    }
-  };
-
-  const getCharSelected = (asset: AssetVersion) => selectedChars[asset.id] || asset.selected;
-  const getSetSelected = (asset: AssetVersion) => selectedSets[asset.id] || asset.selected;
+  const handleSelectCharVersion = (id: string, path: string) => persist(id, { [id]: path });
+  const handleSelectSetVersion = (id: string, path: string) => persist(id, { [id]: path });
 
   return (
     <div className="flex flex-col h-full">
+      {saveError && <p role="alert" className="px-6 py-2 text-sm text-red-500">{saveError}。修改尚未保存，请重试。</p>}
       <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6">
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-1">
@@ -502,10 +483,10 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
               {characters.map(asset => (
                 <AssetRow
                   key={asset.id}
-                  asset={{ ...asset, selected: getCharSelected(asset) }}
+                  asset={asset}
                   type="character"
                   isEditing={editingIds.has(asset.id)}
-                  editDesc={editChars[asset.id] || asset.description}
+                  editDesc={editChars[asset.id] ?? asset.description}
                   onDescChange={val => setEditChars(prev => ({ ...prev, [asset.id]: val }))}
                   onRegenerate={() => handleRegenerate('characters', asset.id)}
                   onSelectVersion={path => handleSelectCharVersion(asset.id, path)}
@@ -516,6 +497,7 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
                   isStageRunning={state.status === 'running'}
                   isRegenerating={regeneratingIds.has(asset.id)}
                   isUploading={uploadingIds.has(asset.id)}
+                  isSaving={savingIds.has(asset.id)}
                 />
               ))}
             </div>
@@ -533,10 +515,10 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
               {settingsData.map(asset => (
                 <AssetRow
                   key={asset.id}
-                  asset={{ ...asset, selected: getSetSelected(asset) }}
+                  asset={asset}
                   type="setting"
                   isEditing={editingIds.has(asset.id)}
-                  editDesc={editSets[asset.id] || asset.description}
+                  editDesc={editSets[asset.id] ?? asset.description}
                   onDescChange={val => setEditSets(prev => ({ ...prev, [asset.id]: val }))}
                   onRegenerate={() => handleRegenerate('settings', asset.id)}
                   onSelectVersion={path => handleSelectSetVersion(asset.id, path)}
@@ -547,6 +529,7 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
                   isStageRunning={state.status === 'running'}
                   isRegenerating={regeneratingIds.has(asset.id)}
                   isUploading={uploadingIds.has(asset.id)}
+                  isSaving={savingIds.has(asset.id)}
                 />
               ))}
             </div>
@@ -567,7 +550,7 @@ export default function CharacterStage({ state, sessionId, onConfirm, onInterven
         stageId="character_design"
         hasPendingItems={hasPendingItems}
         hasNextStageStarted={hasNextStageStarted}
-        isRunning={isRunning}
+        isRunning={isRunning || savingIds.size > 0 || uploadingIds.size > 0}
       />
     </div>
   );

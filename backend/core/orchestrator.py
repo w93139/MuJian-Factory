@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 核心编排器 / 工作流引擎
 管理六阶段状态机，协调各智能体执行，支持用户在任意阶段介入
@@ -562,7 +562,7 @@ class WorkflowEngine:
                 source = char_by_id.get(char.get("character_id") or char.get("id"))
                 if source:
                     for key in ("name", "description", "species"):
-                        if source.get(key):
+                        if source.get(key) or (key == "description" and key in source):
                             char[key] = source[key]
 
             for setting in script_art.get("settings", []):
@@ -571,7 +571,7 @@ class WorkflowEngine:
                 source = setting_by_id.get(setting.get("setting_id") or setting.get("id"))
                 if source:
                     for key in ("name", "description"):
-                        if source.get(key):
+                        if source.get(key) or (key == "description" and key in source):
                             setting[key] = source[key]
 
     def _recalculate_all_statuses(self, state: WorkflowState):
@@ -1069,10 +1069,13 @@ class WorkflowEngine:
             if not state:
                 raise KeyError(f"Session not found: {session_id}")
 
-            previous_artifacts = copy.deepcopy(state.artifacts) if stage == "storyboard" else None
+            previous_artifacts = copy.deepcopy(state.artifacts) if stage in {"storyboard", "character_design"} else None
             previous_status = copy.deepcopy(state.status)
+            sync_payload = copy.deepcopy(body) if stage == "character_design" else None
             try:
                 self._apply_artifact_update(state, stage, body if isinstance(body, dict) else {})
+                if stage == "character_design":
+                    self._sync_artifacts_cross_stages(state, WorkflowStage.CHARACTER_DESIGN, sync_payload)
                 self._recalculate_all_statuses(state)
                 self.save_session_to_disk(session_id)
             except Exception:

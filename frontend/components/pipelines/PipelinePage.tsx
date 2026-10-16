@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
   CheckCircle,
@@ -560,11 +560,13 @@ function TemplatePreviewCard({
 function PipelineHistory({
   pipeline,
   activeTaskId,
+  refreshKey,
   onSelect,
   onDeleted,
 }: {
   pipeline: PipelineId;
   activeTaskId?: string;
+  refreshKey: string;
   onSelect: (task: PipelineTask) => void;
   onDeleted?: (taskId: string) => void;
 }) {
@@ -588,7 +590,7 @@ function PipelineHistory({
 
   useEffect(() => {
     load().catch(() => {});
-  }, [pipeline]);
+  }, [pipeline, refreshKey]);
 
   if (!tasks.length) return null;
 
@@ -698,6 +700,14 @@ function PipelineHistory({
 
 export default function PipelinePage({ pipeline, title, subtitle }: PipelinePageProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlTaskId = searchParams.get('task');
+  const navigateTask = (id?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (id) params.set('task', id); else params.delete('task');
+    router.push(`${pathname}${params.size ? `?${params}` : ''}`, { scroll: false });
+  };
   const TitleIcon = PIPELINE_TITLE_ICONS[pipeline];
   const { canEdit } = useAuth();
   const [videoCatalog, setVideoCatalog] = useState<ApiModelOption[]>([]);
@@ -887,17 +897,20 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
   }, [canEdit, parameterError, generatesVideo, videoModel, llmModel, imageModel, ratio, pipeline, text, templateMode, selectedTemplate, templateVideoEnabled, promptText, imagePath, videoPath, characterImage, goodsText]);
 
   useEffect(() => {
-    if (!task || !['pending', 'running'].includes(task.status)) return;
+    if (!task || task.task_id !== urlTaskId || !['pending', 'running'].includes(task.status)) return;
+    let cancelled = false;
 
     const refreshTask = async () => {
       const fresh = await fetchPipelineTask(task.task_id);
-      setTask(fresh);
+      if (cancelled) return;
+      setTask(prev => prev?.task_id === fresh.task_id ? fresh : prev);
       if (!['pending', 'running'].includes(fresh.status)) {
         setRunning(false);
       }
     };
 
     const handleEvent = (event: PipelineTaskEvent) => {
+      if (cancelled) return;
       if (event.type === 'snapshot' || event.type === 'progress') {
         setTask(prev => prev && prev.task_id === event.task_id
           ? {
@@ -911,33 +924,40 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
       }
 
       if (event.type === 'artifact' || event.type === 'completed' || event.type === 'failed') {
-        refreshTask().catch(() => setRunning(false));
+        refreshTask().catch(() => { if (!cancelled) setRunning(false); });
       }
     };
 
-    return subscribePipelineTask(
+    const unsubscribe = subscribePipelineTask(
       task.task_id,
       handleEvent,
       () => {
-        if (task.status === 'pending' || task.status === 'running') {
+        if (!cancelled && (task.status === 'pending' || task.status === 'running')) {
           setRunning(false);
         }
       },
     );
-  }, [task?.task_id, task?.status]);
+    return () => { cancelled = true; unsubscribe(); };
+  }, [task?.task_id, task?.status, urlTaskId]);
 
   useEffect(() => {
-    const taskId = searchParams.get('task');
-    if (!taskId || task?.task_id === taskId) return;
-    fetchPipelineTask(taskId)
+    let cancelled = false;
+    setError('');
+    setTask(null);
+    setRunning(false);
+    if (!urlTaskId) return;
+    fetchPipelineTask(urlTaskId)
       .then(fresh => {
-        if (fresh.pipeline === pipeline) {
+        if (cancelled) return;
+        if (fresh.pipeline !== pipeline) { setError('任务不属于当前工具'); return; }
+        if (!cancelled) {
           setTask(fresh);
           setRunning(['pending', 'running'].includes(fresh.status));
         }
       })
-      .catch(() => {});
-  }, [pipeline, searchParams, task?.task_id]);
+      .catch(error => { if (!cancelled) setError(error.message || '读取任务失败'); });
+    return () => { cancelled = true; };
+  }, [pipeline, urlTaskId]);
 
   const submit = async () => {
     if (!canSubmit || running) return;
@@ -998,6 +1018,7 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
             });
       const fresh = await fetchPipelineTask(started.task_id);
       setTask(fresh);
+      navigateTask(fresh.task_id);
     } catch (e: any) {
       setError(e.message || '启动失败');
       setRunning(false);
@@ -1370,9 +1391,10 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
       <PipelineHistory
         pipeline={pipeline}
         activeTaskId={task?.task_id}
-        onSelect={selected => setTask(selected)}
+        refreshKey={`${task?.task_id || ''}:${task?.status || ''}`}
+        onSelect={selected => navigateTask(selected.task_id)}
         onDeleted={taskId => {
-          if (task?.task_id === taskId) setTask(null);
+          if (task?.task_id === taskId) { setTask(null); navigateTask(); }
         }}
       />
     </div>

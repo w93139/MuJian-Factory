@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useCallback } from 'react';
 import { Save, X, Code, LayoutList, Users, MapPin, Film, Sparkles, BookOpen, Lightbulb, Target, User, Crosshair, RefreshCw, Palette } from 'lucide-react';
@@ -52,7 +52,8 @@ interface ActCompleteData {
 }
 
 interface ScriptEpisode {
-  act_number: number;
+  act_number?: number;
+  episode_number?: number;
   act_title: string;
   content: string;
 }
@@ -121,27 +122,38 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
   const [editMode, setEditMode] = useState<'structured' | 'raw'>('structured');
   const [editData, setEditData] = useState<ScriptData>({});
   const [rawText, setRawText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const [showSmartContinueDialog, setShowSmartContinueDialog] = useState(false);
   const [smartContinueEpisodes, setSmartContinueEpisodes] = useState<number>(1);
   const [smartContinueIdea, setSmartContinueIdea] = useState<string>('');
 
-  const handleSmartContinueConfirm = useCallback(() => {
-    onIntervene({
-      action: 'smart_continue',
-      episodes_to_add: smartContinueEpisodes,
-      sequel_idea: smartContinueIdea
-    });
-    setShowSmartContinueDialog(false);
-    setSmartContinueIdea('');
-    setSmartContinueEpisodes(1);
-  }, [smartContinueEpisodes, smartContinueIdea, onIntervene]);
+  const handleSmartContinueConfirm = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const saved = await onIntervene({
+        action: 'smart_continue',
+        episodes_to_add: smartContinueEpisodes,
+        sequel_idea: smartContinueIdea,
+      });
+      if (saved === false) throw new Error('续写失败，输入已保留，请重试');
+      setShowSmartContinueDialog(false);
+      setSmartContinueIdea('');
+      setSmartContinueEpisodes(1);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '续写失败，请重试');
+    } finally { setSaving(false); }
+  }, [smartContinueEpisodes, smartContinueIdea, onIntervene, saving]);
 
-  const hasContent = Boolean(data.title || data.characters?.length || data.scenes?.length);
+  const hasContent = Boolean(data.title || data.characters?.length || data.scenes?.length || data.episodes?.length);
 
   const startEdit = useCallback(() => {
     setEditData(JSON.parse(JSON.stringify(data)));
     setRawText(JSON.stringify(data, null, 2));
+    setSaveError('');
     setIsEditing(true);
     setEditMode('structured');
   }, [data]);
@@ -155,16 +167,24 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
     setEditMode(mode);
   }, [editData, rawText]);
 
-  const handleSave = useCallback(() => {
-    let finalData: ScriptData;
-    if (editMode === 'raw') {
-      try { finalData = JSON.parse(rawText); } catch { return; }
-    } else {
-      finalData = editData;
+  const handleSave = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const finalData: ScriptData = editMode === 'raw' ? JSON.parse(rawText) : editData;
+      if (!finalData || typeof finalData !== 'object' || Array.isArray(finalData)) {
+        throw new Error('剧本必须是 JSON 对象');
+      }
+      const saved = await onIntervene({ modified_script: finalData });
+      if (saved === false) throw new Error('保存失败，草稿已保留，请重试');
+      setIsEditing(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '保存失败，草稿已保留');
+    } finally {
+      setSaving(false);
     }
-    onIntervene({ modified_script: finalData });
-    setIsEditing(false);
-  }, [editMode, rawText, editData, onIntervene]);
+  }, [editMode, rawText, editData, onIntervene, saving]);
 
   const cancelEdit = useCallback(() => setIsEditing(false), []);
 
@@ -201,11 +221,11 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
           <h2 className="text-lg font-semibold text-gray-800">剧本生成</h2>
           {isEditing && (
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1 text-xs">
-              <button onClick={() => switchEditMode('structured')}
+              <button disabled={saving} onClick={() => switchEditMode('structured')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${editMode === 'structured' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                 <LayoutList className="w-3.5 h-3.5" />结构编辑
               </button>
-              <button onClick={() => switchEditMode('raw')}
+              <button disabled={saving} onClick={() => switchEditMode('raw')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${editMode === 'raw' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                 <Code className="w-3.5 h-3.5" />JSON编辑
               </button>
@@ -629,7 +649,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
 
         {/* ===== 结构编辑模式 ===== */}
         {isEditing && editMode === 'structured' && (
-          <div className="space-y-6">
+          <fieldset disabled={saving} className="min-w-0 space-y-6">
 
             {/* 基础信息 */}
             <section className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
@@ -698,6 +718,22 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
               </section>
             )}
 
+            {/* Current scripts store narrative text in episodes; preserve IDs and extra metadata. */}
+            {editData.episodes?.map((episode, index) => (
+              <section key={index} className="space-y-2">
+                <h4 className="text-sm font-semibold">第 {episode.episode_number || episode.act_number || index + 1} 集</h4>
+                <label className="block text-xs">剧集标题
+                  <input aria-label={`第 ${index + 1} 集标题`} value={episode.act_title || ''}
+                    disabled={saving} className="w-full border rounded-lg p-3"
+                    onChange={event => updateField('episodes', editData.episodes?.map((item, i) => i === index ? { ...item, act_title: event.target.value } : item))} />
+                </label>
+                <label className="block text-xs">剧本正文
+                  <textarea aria-label={`第 ${index + 1} 集正文`} value={episode.content || ''}
+                    disabled={saving} rows={8} className="w-full border rounded-lg p-3"
+                    onChange={event => updateField('episodes', editData.episodes?.map((item, i) => i === index ? { ...item, content: event.target.value } : item))} />
+                </label>
+              </section>
+            ))}
             {/* 故事线编辑 */}
             {editData.scenes && editData.scenes.length > 0 && (
               <section>
@@ -721,26 +757,26 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
             )}
 
             <div className="flex gap-2 pt-2">
-              <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
+              <button disabled={saving} onClick={() => void handleSave()} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
                 <Save className="w-4 h-4" />保存修改</button>
-              <button onClick={cancelEdit} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+              <button disabled={saving} onClick={cancelEdit} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors">
                 <X className="w-4 h-4" />取消</button>
             </div>
-          </div>
+          </fieldset>
         )}
 
         {/* ===== JSON编辑模式 ===== */}
         {isEditing && editMode === 'raw' && (
-          <div className="space-y-3">
+          <fieldset disabled={saving} className="min-w-0 space-y-3">
             <textarea value={rawText} onChange={e => setRawText(e.target.value)}
               className="w-full bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-700 font-mono leading-relaxed resize-none outline-none min-h-[400px] focus:ring-2 focus:ring-blue-500/30" />
             <div className="flex gap-2">
-              <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
+              <button disabled={saving} onClick={() => void handleSave()} className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-colors">
                 <Save className="w-4 h-4" />保存修改</button>
-              <button onClick={cancelEdit} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors">
+              <button disabled={saving} onClick={cancelEdit} className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 transition-colors">
                 <X className="w-4 h-4" />取消</button>
             </div>
-          </div>
+          </fieldset>
         )}
 
         {/* 等待状态 */}
@@ -749,6 +785,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
         )}
       </div>
 
+      {saveError && <p role="alert" className="px-6 py-2 text-sm text-red-500">{saveError}</p>}
       {!isEditing && !isLoglinePhase && (
         <StageActions
           status={state.status}
@@ -759,7 +796,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
           stageId="script_generation"
           hasPendingItems={hasPendingItems}
           hasNextStageStarted={hasNextStageStarted}
-          isRunning={isRunning}
+          isRunning={isRunning || saving}
         />
       )}
       {isEditing && (
@@ -772,7 +809,7 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
           stageId="script_generation"
           hasPendingItems={hasPendingItems}
           hasNextStageStarted={hasNextStageStarted}
-          isRunning={isRunning}
+          isRunning={isRunning || saving}
         />
       )}
 
@@ -820,13 +857,13 @@ export default function ScriptStage({ state, onConfirm, onIntervene, onRegenerat
 
             <div className="flex justify-end gap-3 mt-8">
               <button 
-                onClick={() => setShowSmartContinueDialog(false)}
+                disabled={saving} onClick={() => setShowSmartContinueDialog(false)}
                 className="px-5 py-2.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl text-sm font-bold transition-colors outline-none"
               >
                 取消
               </button>
               <button 
-                onClick={handleSmartContinueConfirm}
+                disabled={saving} onClick={() => void handleSmartContinueConfirm()}
                 className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl text-sm font-bold hover:from-purple-600 hover:to-purple-700 transition-all shadow-md group flex items-center justify-center gap-2 outline-none hover:shadow-lg"
               >
                 <Sparkles className="w-4 h-4 opacity-70" />
