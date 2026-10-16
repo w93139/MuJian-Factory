@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle, Loader2, Plus, Save, Settings, Trash2, XCircle } from 'lucide-react';
 import BrandHeader from '@/components/BrandHeader';
-import ClearCacheButton from '@/components/ClearCacheButton';
 import InvitePanel from '@/components/InvitePanel';
 import { useAuth } from '@/components/AuthProvider';
 import { fetchModelGroupsByType, fetchVideoModelGroupsByAbility } from '@/lib/modelRegistry';
@@ -287,7 +286,6 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-500">
             修改后端配置并保存到 <span className="font-mono">{formatConfigPath(path)}</span>
           </p>
-          <ClearCacheButton />
           {public_mode && <p className="mt-2 text-xs text-blue-600">公网模式下 API Key 由服务器环境变量管理，此处只读。</p>}
         </div>
 

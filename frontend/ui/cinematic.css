@@ -26,41 +26,9 @@
 .concept * {
   box-sizing: border-box;
 }
-.concept h1,
-.concept h2,
-.concept h3,
-.concept h4,
-.concept p {
-  margin: 0;
-}
-.concept h1 {
-  font-size: 30px;
-  font-weight: 580;
-  letter-spacing: -0.8px;
-  line-height: 1.4;
-}
-.concept h2 {
-  font-size: 19px;
-  font-weight: 560;
-  line-height: 1.5;
-}
-.concept h3 {
-  font-size: 15px;
-  font-weight: 600;
-}
-.concept h4 {
-  font-size: 14px;
-}
 .concept a {
   color: inherit;
   text-decoration: none;
-}
-.concept button,
-.concept input,
-.concept textarea,
-.concept select {
-  font: inherit;
-  color: inherit;
 }
 .concept button {
   cursor: pointer;
@@ -69,18 +37,9 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
-.concept button {
-  border: 0;
-  background: none;
-}
 .concept :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
-}
-.concept img {
-  display: block;
-  width: 100%;
-  object-fit: cover;
 }
 .concept video {
   width: 100%;
@@ -276,8 +235,6 @@
 .concept input[type="checkbox"],
 .concept input[type="radio"] {
   accent-color: var(--accent);
-  width: 13px;
-  height: 13px;
 }
 .concept .stage-title {
   display: flex;
@@ -781,7 +738,8 @@
 }
 
 /* Original workflow components share their interaction logic across both themes. */
-.concept.live .cinematic-workspace {
+.concept.live {
+  font: inherit;
   --lp-canvas-app: #080808;
   --lp-surface: #171717;
   --lp-surface-subtle: #202020;
@@ -803,12 +761,6 @@
   --lp-surface-strong: #ffffff22;
   --lp-border-medium: #ffffff30;
 }
-.concept.live .cinematic-workspace .mj-topbar:not(.mj-topbar-home) {
-  position: relative; inset: auto; width: 100%; height: auto;
-  min-height: 64px; flex-shrink: 0; gap: 10px;
-}
-.concept.live .cinematic-workspace .mj-topbar img { width: 32px; height: 32px; }
-.concept.live .cinematic-workspace .mj-topbar nav { min-width: 0; }
 .concept.live .cinematic-home { isolation: isolate; }
 .concept.live .cinematic-home > .wave-scene { position: absolute; inset: 0 0 auto; height: 760px; z-index: 0; }
 .concept.live .cinematic-home::before { content: none; }
@@ -827,17 +779,13 @@
 .concept.live .cinematic-workspace [class*="bg-gradient-to-"] { background-image: linear-gradient(135deg, #343434, #202020); color: #f2f2f2; }
 .concept.live .cinematic-workspace .bg-black { background-color: #ececec; color: #101010; }
 .concept.live .cinematic-workspace :is(table, td, th) { color: #ddd; }
-.concept.live .cinematic-workspace table { min-width: 600px; }
 .concept.live .cinematic-home .mj-composer-toolbar { flex-wrap: wrap; gap: 12px; }
 @media (max-width: 850px) {
-  .concept.live .cinematic-workspace .mj-topbar:not(.mj-topbar-home) { flex-wrap: wrap; padding: 12px; }
-  .concept.live .cinematic-workspace .mj-topbar nav { order: 3; flex-basis: 100%; }
   .concept.live .cinematic-home .mj-home-main { padding: 100px 18px 30px !important; }
   .concept.live .cinematic-home .mj-hero-title h1 { letter-spacing: -1px; }
   .concept.live .cinematic-home .mj-composer-toolbar > div { flex-wrap: wrap; }
 }
 
-.concept.live .cinematic-workspace .mj-topbar + div { display: none; }
 .concept.live .cinematic-workspace :is(.stage-explanation, .episode-ordinal) { display: none; }
 .concept.live .cinematic-workspace .stage-explanation + * { margin-top: 24px; }
 .concept.live .cinematic-workspace :is(.text-purple-300, .text-purple-500, .text-violet-500, .text-orange-500, .text-cyan-500, .text-blue-500) { color: #bdbdbd; }
@@ -847,7 +795,6 @@
 .concept.live .cinematic-projects .mj-history { padding-top: 32px; }
 .concept.live .cinematic-projects .cinematic-empty-projects { display: block; padding: 80px 20px; }
 
-.concept.live .cinematic-workspace:not(.cinematic-session) > .h-screen { height: auto; min-height: calc(100dvh - 80px); }
 .concept.live .cinematic-home .mj-home-main { pointer-events: none; }
 .concept.live .cinematic-home .mj-home-main > * { pointer-events: auto; }
 .concept.live .cinematic-home .wave-scene .motion-toggle { top: 24px; bottom: auto; right: 24px; }
@@ -857,3 +804,16 @@
   .concept.live .cinematic-home .mj-generation-panel label { min-width: 0; }
   .concept.live .cinematic-home .mj-generation-panel label > .flex { flex-wrap: wrap; }
 }
+
+/* Sidebar geometry and controls come from AppShell; only its palette changes. */
+.concept.live .mj-sidebar :is(.text-gray-700, .text-gray-600) { color: var(--lp-text-default); }
+.concept.live .mj-sidebar :is(.text-gray-500, .text-gray-400) { color: var(--lp-text-muted); }
+.concept.live .mj-sidebar .bg-gray-100 { background-color: var(--lp-surface-soft); }
+.concept.live .mj-sidebar-brand img { width: 32px; object-fit: contain; }
+
+.concept.live :is(.mj-sidebar-brand, .legacy-brand-header, .mj-topbar) img { filter: grayscale(1) brightness(0) invert(.9); }
+.live-main :is(.bg-indigo-50, .bg-indigo-100) { background-color: #292929; }
+.live-main :is(.text-indigo-700, .text-blue-500) { color: #ddd; }
+.live-main :is(.border-indigo-500, .border-indigo-100) { border-color: #ffffff50; }
+.live-main .bg-indigo-600 { background-color: #e6e6e6; color: #101010; }
+.live-main .bg-indigo-600:hover { background-color: #fff; }

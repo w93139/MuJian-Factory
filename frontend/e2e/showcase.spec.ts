@@ -122,10 +122,12 @@ test('管理员创建邀请码和示例后，面试官仅能浏览示例；作�
     const inviteCode = await inviteRow.locator('code').first().innerText();
     expect(inviteCode).toMatch(/^[A-Z2-9]{8}$/);
 
-    await admin.goto('/pipelines/standard');
+    await admin.goto('/pipelines/standard', { waitUntil: 'domcontentloaded' });
     const taskCard = admin.locator('div.group').filter({ hasText: '待设为示例的任务' });
+    const promoted = admin.waitForResponse(response => response.url().endsWith('/api/tasks/e2e-promote-task') && response.request().method() === 'PATCH');
     await taskCard.getByRole('button', { name: '设为示例' }).click();
-    await expect(taskCard.getByRole('button', { name: '取消示例' })).toBeVisible();
+    expect((await promoted).ok()).toBe(true);
+    await expect(taskCard.getByRole('button', { name: '取消示例' })).toBeVisible({ timeout: 15000 });
 
     await guest.goto(`/login?code=${inviteCode}`);
     await expect(guest).toHaveURL('/');

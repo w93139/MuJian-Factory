@@ -129,7 +129,7 @@ test('首次创建流水线任务立即进入历史列表，无模型调用', as
 test('全局任务入口和缓存成功失败反馈，移动布局与访客权限', async ({ page }) => {
   await admin(page);
   await page.goto('/settings');
-  const panels = page.getByRole('complementary', { name: '任务列表' });
+  const panels = page.getByRole('complementary', { name: '侧边栏' });
   await expect(panels.getByText('进行中任务', { exact: true })).toBeVisible();
   await expect(panels.getByText('已完成/等待确认', { exact: true })).toBeVisible();
   await expect(panels.getByRole('button').filter({ hasText: '公开流水线示例' })).toBeVisible();
@@ -138,17 +138,22 @@ test('全局任务入口和缓存成功失败反馈，移动布局与访客权�
     expect(route.request().method()).toBe('DELETE'); calls++;
     return calls === 1 ? route.fulfill({ status: 500, json: { detail: '缓存清理失败测试' } }) : route.fulfill({ json: { status: 'ok', deleted: 2, freed_mb: 1 } });
   });
+  const messages: string[] = [];
+  page.on('dialog', async dialog => { messages.push(dialog.message()); await dialog.accept(); });
+  await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '清空缓存', exact: true }).click();
-  await expect(page.getByRole('alert').filter({ hasText: '缓存清理失败测试' })).toBeVisible();
+  await expect.poll(() => messages[0]).toContain('缓存清理失败测试');
   await page.getByRole('button', { name: '清空缓存', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: '缓存已清空' })).toBeVisible();
+  await expect.poll(() => messages[1]).toContain('缓存已清空');
   expect(calls).toBe(2);
+  await page.getByRole('button', { name: '收起侧边栏' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.locator('.legacy-brand-header')).toBeHidden();
+  await expect(page.locator('.legacy-brand-header')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBeTruthy();
   await page.screenshot({ path: '../.local-artifacts/parity-settings-mobile.png', fullPage: true });
   await page.unroute('**/api/cache/temp');
-  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await page.getByRole('button', { name: '打开侧边栏' }).click();
+  await page.getByRole('button', { name: '退出', exact: true }).click();
   await page.goto('/login?code=E2EDEMO2');
   await expect(page).toHaveURL('/');
   await page.goto('/settings');
@@ -165,7 +170,7 @@ test('全局面板保留六阶段完成、待确认和沙盒任务跳转', async
   ] } }));
   await page.route('**/api/sandbox/tasks', route => route.fulfill({ json: { tasks: [{ id: 'sandbox-parity', tool: 't2i', status: 'running', input: { prompt: '沙盒运行任务测试' } }] } }));
   await page.goto('/settings');
-  const panels = page.getByRole('complementary', { name: '任务列表' });
+  const panels = page.getByRole('complementary', { name: '侧边栏' });
   await expect(panels.getByRole('button').filter({ hasText: '六阶段完成测试' })).toBeVisible();
   await panels.getByRole('button').filter({ hasText: '角色等待确认测试' }).click();
   await expect(page).toHaveURL(/session=parity-role&stage=character_design/);

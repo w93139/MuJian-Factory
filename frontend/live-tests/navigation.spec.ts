@@ -14,24 +14,24 @@ test('正式光影入口保留参数、工具与移动端布局', async ({ page 
   await expect(page.getByRole('button', { name: '逐步创作', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '一键生成', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '快速演示（约 30 秒成片）', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '收起侧边栏' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('combobox', { name: '视频生成方式', exact: true })).toBeVisible();
   await page.screenshot({ path: '../.local-artifacts/cleanup-home-mobile.png', fullPage: true });
   const overflow = await page.evaluate(() => [...document.querySelectorAll('main *')].map(el => ({ className: el.className, width: el.getBoundingClientRect().width, right: el.getBoundingClientRect().right })).filter(el => el.right > innerWidth + 1).slice(0, 12));
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), JSON.stringify(overflow)).toBeTruthy();
   await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: '打开侧边栏' }).click();
   await page.goto('/?session=live-edit&stage=storyboard');
   await expect(page.getByRole('heading', { name: '分镜设计', exact: true })).toBeVisible();
   const navigation = page.getByRole('navigation', { name: '主导航' });
-  await navigation.getByRole('link', { name: '创作首页', exact: true }).click();
+  await navigation.getByRole('link', { name: '幕间', exact: true }).click();
   await expect(page).toHaveURL('/');
   await expect(page.locator('.mj-composer')).toBeVisible();
   await expect(page.getByRole('heading', { name: '分镜设计', exact: true })).toHaveCount(0);
-  await navigation.getByRole('link', { name: '我的项目', exact: true }).click();
-  await expect(page).toHaveURL('/?view=projects');
   await expect(page.locator('.mj-history')).toBeVisible();
   await expect(page.locator('.mj-history-card').first()).toBeVisible();
-  await expect(page.locator('.mj-composer')).toBeHidden();
+  await expect(page.locator('.mj-composer')).toBeVisible();
 
   for (const [url, text, name] of [
     ['/sandbox', '临时工作台', 'sandbox'],
@@ -117,7 +117,7 @@ test('新建自动项目后同址返回首页和切换阶段保留控制器状�
   await expect(page).toHaveURL('/');
 
   const navigation = page.getByRole('navigation', { name: '主导航' });
-  await navigation.getByRole('link', { name: '创作首页', exact: true }).click();
+  await navigation.getByRole('link', { name: '幕间', exact: true }).click();
   await expect(page.locator('.mj-composer')).toBeVisible();
   await expect(page.getByRole('heading', { name: '剧本生成', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '自动', exact: true })).toBeVisible();
@@ -127,7 +127,7 @@ test('新建自动项目后同址返回首页和切换阶段保留控制器状�
   await expect(page).toHaveURL(`/?session=${sid}&stage=storyboard`);
   await expect(page.getByRole('heading', { name: '分镜设计', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '自动', exact: true })).toBeVisible();
-  await navigation.getByRole('link', { name: '创作首页', exact: true }).click();
+  await navigation.getByRole('link', { name: '幕间', exact: true }).click();
   await expect(page.locator('.mj-composer')).toBeVisible();
   await expect(page.getByRole('button', { name: '自动', exact: true })).toBeVisible();
   expect(starts).toBe(1);

@@ -27,5 +27,12 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 90000,
     },
+    {
+      command:
+        "MUJIAN_DIST_DIR=.next-layout-legacy NEXT_PUBLIC_MUJIAN_LEGACY=1 BACKEND_API_URL=http://127.0.0.1:18775 npm run dev -- --hostname 127.0.0.1 --port 18777",
+      url: "http://127.0.0.1:18777/login",
+      reuseExistingServer: false,
+      timeout: 90000,
+    },
   ],
 });

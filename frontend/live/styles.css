@@ -33,9 +33,6 @@
 .live-main {
   min-width: 0;
 }
-.live:not(.landing) .live-main {
-  padding: 30px 4vw;
-}
 .live .wave-stage {
   min-height: 640px;
 }
@@ -376,12 +373,6 @@
 .live-main textarea {
   color-scheme: dark;
 }
-.live-main .h-screen {
-  height: calc(100vh - 150px);
-}
-.live-main .min-h-screen {
-  min-height: calc(100vh - 150px);
-}
 @media (max-width: 850px) {
   .live-header {
     gap: 16px;
@@ -415,40 +406,9 @@
   .live .wave-stage {
     min-height: 580px;
   }
-  .live:not(.landing) .live-main {
-    padding: 20px 14px;
-  }
   .live-asset-grid {
     grid-template-columns: 1fr;
   }
 }
 
-/* Restore the original always-visible task entries within the cinematic palette. */
-.live-workspace { display: grid; grid-template-columns: minmax(0, 1fr); }
-.live-workspace.has-task-panels { grid-template-columns: minmax(0, 1fr) 224px; }
-.live-task-panels { min-width: 0; padding: 20px 12px; border-left: 1px solid #ffffff19; }
-.live-task-panels .mj-task-panel { border-color: #ffffff19; padding: 12px 0; height: 24vh; min-height: 170px; }
-.live-task-panels .mj-task-item { background: #191919; border-color: #ffffff19; }
-.live-task-panels .mj-task-item:hover { background: #242424; border-color: #ffffff50; }
-.live-task-panels [class*="text-gray-"] { color: #b8b8b8; }
-.live-task-panels [class*="border-gray-"] { border-color: #ffffff19; }
-.live-task-panels [class*="bg-gray-"] { background: #292929; }
-.live-task-panels .bg-blue-500 { background: #ddd; }
-@media (max-width: 1100px) {
-  .live-workspace.has-task-panels { grid-template-columns: minmax(0, 1fr); }
-  .live-task-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border-left: 0; border-top: 1px solid #ffffff19; }
-}
-@media (max-width: 560px) {
-  .live-task-panels { grid-template-columns: minmax(0, 1fr); }
-}
-.live-task-panels {
-  --lp-border-divider: #ffffff19;
-  --lp-surface-subtle: #171717;
-  --lp-surface-hover: #242424;
-  --lp-text-muted: #aaa;
-  --lp-text-subtle: #888;
-  --lp-accent: #ddd;
-}
-/* The cinematic header already provides the same home link; avoid a second fixed header over navigation. */
-.live .legacy-brand-header, .live .legacy-brand-spacer { display: none; }
 .live-main .bg-white\/95 { background: #1b1b1bf2; }

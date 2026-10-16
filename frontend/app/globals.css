@@ -139,6 +139,10 @@ body {
     box-shadow: none !important;
 }
 
+.mj-sidebar[data-open="false"] {
+    border-right-width: 0 !important;
+}
+
 .mj-sidebar-brand {
     height: 72px !important;
     padding-inline: 24px !important;
@@ -684,7 +688,7 @@ body {
 }
 
 @media (max-width: 640px) {
-    .mj-sidebar {
+    .mj-sidebar[data-open="true"] {
         width: min(15.5rem, calc(100vw - 16px)) !important;
     }
 

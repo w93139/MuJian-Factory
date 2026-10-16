@@ -306,7 +306,12 @@ export function SidebarTaskPanels({ currentPath }: { currentPath: string }) {
   );
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children, cinematic = false, landing = false, onHomeNavigate }: {
+  children: React.ReactNode;
+  cinematic?: boolean;
+  landing?: boolean;
+  onHomeNavigate?: () => void;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { loading: authLoading, role, public_mode, canEdit, error: authError, refresh, logout } = useAuth();
@@ -342,22 +347,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (pathname === '/login') return <>{children}</>;
+  const standalone = (content: React.ReactNode) => cinematic
+    ? <div className="concept v3 director live live-main">{content}</div>
+    : <>{content}</>;
+  // Keep the cinematic login mounted after identity loading, as in the previous LiveShell.
+  // Otherwise a late-hydrating login boundary can retain its server-rendered disabled button.
+  if (pathname === '/login') return standalone(cinematic && authLoading
+    ? <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">正在验证访问权限…</div>
+    : children);
   if (authError) {
-    return <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-red-600">
+    return standalone(<div className="flex min-h-screen flex-col items-center justify-center gap-3 text-sm text-red-600">
       {authError}<button type="button" onClick={() => void refresh()} className="rounded-lg border px-3 py-2">重试</button>
-    </div>;
+    </div>);
   }
   if (authLoading || (public_mode && role === 'anonymous')) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-gray-500">正在验证访问权限…</div>;
+    return standalone(<div className="flex min-h-screen items-center justify-center text-sm text-gray-500">正在验证访问权限…</div>);
   }
 
   return (
     <div
-      className="mj-shell min-h-screen bg-gray-50 text-gray-800"
+      className={clsx("mj-shell min-h-screen bg-gray-50 text-gray-800", cinematic && "concept v3 director live", cinematic && landing && "landing")}
       style={{ '--app-sidebar-width': open ? '15.5rem' : '0px' } as CSSProperties}
     >
+      {cinematic && <a href="#main-content" className="skip-link">跳到主要内容</a>}
       <aside
+        aria-label="侧边栏"
+        data-open={open}
+        aria-hidden={!open}
+        inert={!open}
         className={clsx(
           'mj-sidebar fixed inset-y-0 left-0 z-40 border-r border-gray-200 bg-white shadow-sm transition-all duration-300',
           !open && 'border-r-0'
@@ -371,7 +388,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <span className="text-base font-semibold text-gray-900 truncate">幕间</span>
             </div>
           </div>
-          <nav className="mj-sidebar-nav min-h-0 flex-1 overflow-y-auto p-3 space-y-1">
+          <nav aria-label="主导航" className="mj-sidebar-nav min-h-0 flex-1 overflow-y-auto p-3 space-y-1">
             {NAV_ITEMS.map(item => {
               const Icon = item.icon;
               const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
@@ -379,6 +396,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={item.href === '/' ? event => {
+                    if (!event.defaultPrevented && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) onHomeNavigate?.();
+                  } : undefined}
                   className={clsx(
                     'mj-sidebar-link flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
                     active
@@ -463,7 +483,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {!open && (
         <button
           onClick={() => setSidebarOpen(true)}
-          className="fixed left-0 top-1/2 z-50 h-14 w-7 -translate-y-1/2 rounded-r-xl border border-l-0 border-gray-200 bg-white text-gray-400 shadow-sm hover:w-9 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all"
+          className="mj-sidebar-toggle fixed left-0 top-1/2 z-50 h-14 w-7 -translate-y-1/2 rounded-r-xl border border-l-0 border-gray-200 bg-white text-gray-400 shadow-sm hover:w-9 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 flex items-center justify-center transition-all"
           title="打开侧边栏"
           aria-label="打开侧边栏"
         >
@@ -472,7 +492,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
 
       <main
-        className="mj-main min-h-screen min-w-0 overflow-x-hidden transition-[margin] duration-300"
+        id="main-content"
+        className={clsx("mj-main min-h-screen min-w-0 overflow-x-hidden transition-[margin] duration-300", cinematic && "live-main")}
         style={{ marginLeft: open ? 'var(--app-sidebar-width)' : '0px' }}
       >
         {public_mode && role === 'guest' && <div className="sticky top-0 z-20 border-b border-blue-100 bg-blue-50 px-5 py-2 text-center text-sm font-medium text-blue-700">展示模式：仅可浏览示例作品</div>}
