@@ -29,7 +29,7 @@ const pages = [
     .map((stage, i) => [`/?session=${stage === 'character_design' ? 'parity-role' : 'e2e-showcase'}&stage=${stage}`, ['剧本生成', '角色 / 场景设计', '分镜设计', '参考图生成', '视频生成', '后期剪辑'][i]]),
 ];
 for (const [url, title] of pages) {
-  test(`原版对应：${title}的控件顺序、默认状态与固定顶栏`, async ({ page, browser }) => {
+  test(`同源主题回归：${title}的控件顺序、默认状态与固定顶栏`, async ({ page, browser }) => {
     const legacy = await browser.newPage({ viewport: { width: 1280, height: 720 } });
     try {
       await login(page);
@@ -62,7 +62,7 @@ for (const [url, title] of pages) {
   });
 }
 
-test('左侧导航、两组任务和设置的布局与原版相同，收起展开及刷新保持', async ({ page, browser }) => {
+test('左侧导航、两组任务和设置的布局在两种主题相同，收起展开及刷新保持', async ({ page, browser }) => {
   const legacy = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   try {
     await login(page);
@@ -141,4 +141,19 @@ test('身份读取缓慢时等待就绪再显示登录表单，按钮可用', as
     await page.getByRole('button', { name: '进入幕间' }).click();
     await expect(page.locator('.mj-composer')).toBeVisible();
   } finally { release(); }
+});
+
+test('旧项目书签保留首页创作区，访客案例首屏直接可见', async ({ page, browser }) => {
+  await login(page);
+  await page.goto('/?view=projects');
+  await expect(page.locator('.mj-composer')).toBeVisible();
+  await expect(page.locator('.wave-scene')).toBeVisible();
+  const guest = await browser.newPage();
+  try {
+    await guest.goto('http://127.0.0.1:18776/login?code=E2EDEMO2');
+    await expect(guest).toHaveURL('http://127.0.0.1:18776/');
+    await expect(guest.getByRole('heading', { name: '示例作品', exact: true })).toBeInViewport();
+    await expect(guest.getByRole('button', { name: '演示短片：一封信' })).toBeInViewport();
+    await expect(guest.locator('.wave-stage')).toHaveCount(0);
+  } finally { await guest.close(); }
 });

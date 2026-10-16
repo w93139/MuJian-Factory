@@ -679,7 +679,6 @@ export default function SandboxPage() {
                 <label className="text-sm">分辨率<select aria-label="分辨率" className="block w-full border rounded p-2" value={resolution} onChange={e => setResolution(e.target.value)} disabled={!canEdit || !resolutions.length}>{!resolutions.length && <option value="">模型默认</option>}{resolutions.map(value => <option key={value}>{value}</option>)}</select></label>
                 {activeTool === 'video' && <label className="text-sm">时长 秒{durations.length ? <select aria-label="时长 秒" className="block w-full border rounded p-2" value={duration} onChange={e => setDuration(Number(e.target.value))}>{durations.map(value => <option key={value}>{value}</option>)}</select> : <input aria-label="时长 秒" className="block w-full border rounded p-2" type="number" min={durationSpec.min || 1} max={durationSpec.max || 15} step={1} value={duration} onChange={e => setDuration(Number(e.target.value))} />}</label>}
               </div>}
-              {activeTool === 'llm' && <p className="text-xs text-gray-500 mb-3">创意强度暂不可配置</p>}
               {['t2i', 'i2i'].includes(activeTool) && (capabilities.resolutions || []).some((value: string) => !resolutions.includes(value)) && <p className="text-xs text-gray-500 mb-3">部分注册分辨率尚未接入当前图片适配器或不适用于此工具 暂不可选</p>}
               {activeTool === 't2i' && <p className="text-xs text-gray-500 mb-3">独立风格参数暂不可用 请将风格写入图片描述</p>}
               {/* 图片上传（部分工具需要） */}

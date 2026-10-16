@@ -791,9 +791,6 @@
 .concept.live .cinematic-workspace :is(.text-purple-300, .text-purple-500, .text-violet-500, .text-orange-500, .text-cyan-500, .text-blue-500) { color: #bdbdbd; }
 .concept.live .cinematic-workspace button.border { border-width: 1px; border-style: solid; }
 .concept.live .cinematic-empty-projects { display: none; }
-.concept.live .cinematic-projects .cinematic-home > :is(.wave-scene, .mj-home-main) { display: none; }
-.concept.live .cinematic-projects .mj-history { padding-top: 32px; }
-.concept.live .cinematic-projects .cinematic-empty-projects { display: block; padding: 80px 20px; }
 
 .concept.live .cinematic-home .mj-home-main { pointer-events: none; }
 .concept.live .cinematic-home .mj-home-main > * { pointer-events: auto; }
