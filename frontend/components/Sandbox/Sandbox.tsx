@@ -339,6 +339,9 @@ export default function SandboxPage() {
   const durationSpec = capabilities.duration || {};
   const durations: number[] = durationSpec.values || durationSpec.options || [];
   useEffect(() => {
+    // History can arrive before the model catalog; keep its parameters until
+    // the selected model's actual constraints are available.
+    if (!catalog.some(model => model.id === selectedModel && model.model_type === activeTool)) return;
     setRatio(current => ratios.includes(current) ? current : ratios[0] || '16:9');
     setResolution(current => resolutions.includes(current) ? current : resolutions[0] || '');
     setDuration(current => durations.length ? (durations.includes(current) ? current : durations[0]) : Math.max(durationSpec.min || 1, Math.min(durationSpec.max || 15, current)));
@@ -487,6 +490,7 @@ export default function SandboxPage() {
   // 监听工具变化，确保模型选择同步
   useEffect(() => {
     const models = getModels();
+    if (!models.length) return;
     // 只有当前模型不在新工具的模型列表中时才更新
     const currentInList = models.some(m => m.id === selectedModel);
     if (!currentInList) {
