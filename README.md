@@ -1,56 +1,48 @@
 # 幕间 MuJian
 
-AI 视频创作工作台。正式界面采用「光影叙事」，沿用原后端、认证权限、模型目录和媒体存储。当前已完成本次分镜与工具契约修复；付费生成效果与全部旧界面交互迁移尚未验收。
+AI 视频创作工作台，包含六阶段创作流程、沙盒工具和快捷流水线。Next.js 前端连接 FastAPI 后端，使用统一认证权限、模型目录和 JSON／媒体文件存储。
 
-## 三个版本
+## 本地运行
 
-统一项目位置：`/Users/syk/Desktop/MuJian/`。
+准备 Python 3.11、uv、Node.js 20+、npm 和 ffmpeg。从仓库根目录操作；首次运行前按 [配置示例](backend/config.yaml.example) 准备私有配置，已有配置不要覆盖。
 
-| 版本 | 源码与用途 | 启动 |
-| --- | --- | --- |
-| 正式集成版 | 根 `frontend/`、`backend/`、`deploy/`、`scripts/`；唯一继续开发和提交的仓库 | 见下文，默认光影真实接口界面 |
-| 旧版完整备份 | `旧版完整备份/`；改版前 0ab8dff，含 Git、隐藏配置、本地项目及媒体 | 在该目录按原 README 启动；恢复前先复制至另一个隔离位置，避免误写备份 |
-| 新前端设计版 | `新前端设计版/`；58b4a03 的独立设计源码，入口 `apps/director` | `cd 新前端设计版/frontend && npm run dev:director`；默认 3101，业务使用模拟数据 |
+终端一：
 
-两个保留版本不随正式代码同步覆盖，也不提交 GitHub。历史截图、日志、计划及 ZIP 位于 `.local-artifacts/`；历史 ZIP 不是当前交付版本。迁移来源未删除。
-
-## 正式版本地运行
-
-需要 Node.js/npm、Python/uv 以及原后端运行依赖。保留现有私有配置，不将密钥写入仓库。
-
-```bash
-cd /Users/syk/Desktop/MuJian/backend
+```sh
+cd backend
 uv sync --python 3.11
-uv run python api_server.py
+uv run python -m uvicorn api.app:app --host 127.0.0.1 --port 8000
 ```
 
-另开终端：
+终端二，从仓库根目录开始：
 
-```bash
-cd /Users/syk/Desktop/MuJian/frontend
+```sh
+cd frontend
 npm ci
-npm run dev
+BACKEND_API_URL=http://127.0.0.1:8000 npm run dev -- --hostname 127.0.0.1 --port 3000
 ```
 
-默认前端 `http://localhost:3000`，后端 `http://localhost:8000`。自定义后端时设置 `BACKEND_API_URL`；Next.js 代理配置需要在启动或构建时传入。公开模式沿用原管理员登录和体验码权限；具体环境配置与隔离预览见 [运行说明](docs/local-run.md)。
+打开 <http://127.0.0.1:3000/>，后端健康检查为 <http://127.0.0.1:8000/api/health>。`BACKEND_API_URL` 在前端启动或构建时生效。服务配置、登录模式及隔离预览见 [运行说明](docs/local-run.md)。
 
-`npm run dev` 默认正式光影界面；`NEXT_PUBLIC_MUJIAN_LEGACY=1 npm run dev` 保留原业务界面以回归原有能力。新界面经用户验收前，两者继续提供。正式源码已移除三套设计演示入口、模拟状态和未选方案；独立设计仍从 `新前端设计版/` 启动。
+## 范围与数据
 
-版本回溯见 [版本保存与恢复](docs/version-recovery.md)。更新前有 checkpoint 标签，用户验收后才记录 accepted 标签；前后端成套保存，私有数据继续本地备份。
+- 正式界面采用「光影叙事」。`NEXT_PUBLIC_MUJIAN_LEGACY=1` 可启用仓库内保留的原业务界面，供回归比较。
+- 付费生成效果与全部旧界面交互迁移仍需验收；存在代码不代表所有真实供应商流程已经验证。
+- 模型生成可能产生费用。不要提交 `backend/config.yaml`、`.env`、密钥、用户会话或生成媒体。
+- 用户数据与媒体分别保存在 `backend/code/data/`、`backend/code/result/`，不随源码分发。
 
-## 验证与交付
+## 开发与维护
 
-```bash
+```sh
 ./scripts/check.sh
-# 已包括旧版回归、正式光影联调及演示代码隔离检查
 ```
 
-- [本轮前端瘦身与待验收说明](docs/frontend-cleanup.md)
-- [目录清单和迁移校验](docs/directory-inventory.md)
-- [实施计划与范围](docs/integration-plan.md)
-- [分镜和故事工作流契约](docs/contracts-workflow.md)
-- [工具与后端契约核查表](docs/contracts-tools.md)
-- [验证结果、限制及接入进度](docs/integration-report.md)
-- [本地运行和版本入口](docs/local-run.md)
+检查脚本覆盖后端、前端构建与浏览器回归；需要相应开发依赖和浏览器环境。
 
-原项目许可及第三方说明仍见 `LICENSE` 和 `THIRD_PARTY_NOTICES.md`。私有配置、数据、生成媒体、版本备份和本地归档均不随正式源码提交。
+- [工作流契约](docs/contracts-workflow.md) · [工具契约](docs/contracts-tools.md)
+- [集成验证与限制](docs/integration-report.md) · [前端迁移说明](docs/frontend-cleanup.md)
+- [版本保存与恢复](docs/version-recovery.md)
+
+## 许可
+
+见 [LICENSE](LICENSE) 与 [第三方声明](THIRD_PARTY_NOTICES.md)。
