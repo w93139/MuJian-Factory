@@ -26,6 +26,7 @@ class StandardPipelineRequest(BaseModel):
     subtitle_template_fields: Optional[Dict[str, str]] = None
     template_media_kind: Literal["image", "video"] = "image"
     video_duration: int = 5
+    tts_model: str = "edge-tts"
     tts_voice: str = "zh-CN-YunjianNeural"
     tts_speed: float = 1.0
     negative_prompt: Optional[str] = None
@@ -61,6 +62,7 @@ class DigitalHumanPipelineRequest(BaseModel):
     video_ratio: str = "9:16"
     video_resolution: Optional[str] = None
     resolution: Optional[str] = None
+    tts_model: str = "edge-tts"
     tts_voice: str = "zh-CN-YunjianNeural"
     tts_speed: float = 1.0
     negative_prompt: Optional[str] = None

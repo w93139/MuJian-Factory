@@ -29,6 +29,7 @@ from pipelines.api_media import list_api_workflows
 from pipelines.events import task_event_stream
 from pipelines.runner import PIPELINE_REGISTRY, run_pipeline_task
 from pipelines.storage import create_task, delete_task, list_tasks, load_task, set_task_showcase
+from pipelines.tts import validate_tts_options
 from pipelines.utils import TEMPLATE_FIELD_DEFAULTS, template_custom_fields, template_media_spec
 from quick_demo import quick_demo_video_model
 
@@ -126,6 +127,13 @@ def _start_task(background_tasks: BackgroundTasks, pipeline: str, params: dict):
         raise HTTPException(404, f"Pipeline not found: {pipeline}")
     if pipeline == "standard":
         _validate_standard_image_ratio(params)
+    if pipeline in {"standard", "digital_human"}:
+        try:
+            validate_tts_options(params.get("tts_model", "edge-tts"),
+                                 params.get("tts_voice", "zh-CN-YunjianNeural"),
+                                 float(params.get("tts_speed", 1.0)))
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(422, str(exc)) from exc
     try:
         job_token = job_limiter.reserve()
     except RuntimeError as exc:
@@ -188,7 +196,7 @@ async def get_api_workflows(
 @router.get("/api/models")
 async def get_api_models(
     media_type: Optional[str] = Query(None, pattern="^(image|video)$"),
-    model_type: Optional[str] = Query(None, pattern="^(llm|vlm|t2i|i2i|video)$"),
+    model_type: Optional[str] = Query(None, pattern="^(llm|vlm|t2i|i2i|video|tts)$"),
     ability: Optional[str] = Query(None),
     verified_only: bool = False,
 ):

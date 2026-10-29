@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 
+from dashscope import MultiModalConversation
 from dashscope.aigc.image_generation import ImageGeneration
 
 from config import Config
@@ -11,6 +12,12 @@ from usage import billable_request
 
 
 class DashScopeClient:
+    @staticmethod
+    def _call(**kwargs):
+        if kwargs["model"].startswith("qwen-image-3.0"):
+            return MultiModalConversation.call(**kwargs)
+        return ImageGeneration.call(**kwargs)
+
     def __init__(self, api_key=None, base_url=None):
         self.api_key = api_key or Config.DASHSCOPE_API_KEY
         # 默认使用中国（北京）地域 API，如果参数或 config.yaml 未设置则使用默认地址
@@ -26,7 +33,7 @@ class DashScopeClient:
                 raise RuntimeError("DASHSCOPE_API_KEY 未配置")
             messages = [{"role": "user", "content": [{"text": prompt}]}]
             with billable_request(model, images=n):
-                response = ImageGeneration.call(
+                response = self._call(
                     model=model,
                     api_key=self.api_key,
                     base_address=self.base_url,
@@ -43,7 +50,7 @@ class DashScopeClient:
                     if response.output and response.output.choices:
                         for item in response.output.choices:
                             if 'message' in item and 'content' in item['message']:
-                                results.append(item['message']['content'][0]['image'])
+                                results.extend(content['image'] for content in item['message']['content'] if 'image' in content)
                 except Exception as e:
                     raise RuntimeError(f"万相图片结果解析失败: {e}") from e
                 
@@ -92,8 +99,8 @@ class DashScopeClient:
             if not self.api_key:
                 raise RuntimeError("DASHSCOPE_API_KEY 未配置")
             # Use ImageGeneration.call with messages, same as generate_image
-            with billable_request(model, images=n):
-                response = ImageGeneration.call(
+            with billable_request(model, images=n, input_images=len(image_urls)):
+                response = self._call(
                     model=model,
                     api_key=self.api_key,
                     base_address=self.base_url,

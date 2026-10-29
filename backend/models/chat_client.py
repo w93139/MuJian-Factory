@@ -87,6 +87,8 @@ class ChatClient:
                 extra_body["enable_thinking"] = False
             if extra_body:
                 request["extra_body"] = extra_body
+        elif provider == "ark" and (disable_thinking or model_info.get("default_disable_thinking")):
+            request["extra_body"] = {"thinking": {"type": "disabled"}}
 
         proxy = Config.provider_proxy(provider)
         timeout = Config.REQUEST_TIMEOUT

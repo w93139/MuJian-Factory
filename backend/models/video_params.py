@@ -67,6 +67,12 @@ def validate_video_inputs(model: str, **inputs) -> None:
     if metadata.get("available") is False:
         raise ValueError(f"该账号尚未开通此模型：{model}")
     abilities = set(metadata.get("capabilities", {}).get("adapter_ability_types", []))
+    limit = metadata.get("capabilities", {}).get("max_reference_images")
+    if limit:
+        references = list(inputs.get("reference_image_paths") or [])
+        references += [inputs.get("reference_image_path"), inputs.get("image_path")]
+        if len({value for value in references if value}) > limit:
+            raise ValueError(f"模型最多支持 {limit} 张参考图：{model}")
     requirements = {
         "last_image_path": "start_end_frame_i2v", "first_clip_path": "video_continuation",
         "reference_image_path": "reference_to_video", "reference_image_paths": "reference_to_video",

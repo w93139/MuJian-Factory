@@ -13,7 +13,7 @@ from models.config_model import (
 def test_registry_contains_only_planned_providers_and_models():
     models = load_model_config()["models"]
     assert {metadata["provider"] for metadata in models.values()} <= {
-        "dashscope", "ark", "openai_compatible",
+        "dashscope", "ark", "openai_compatible", "edge",
     }
     assert "seedance-1-0-pro" not in models
     assert "seedance-1-0-lite" not in models

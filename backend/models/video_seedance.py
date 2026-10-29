@@ -109,7 +109,7 @@ class SeedanceVideoClient:
             "model": model,
             "content": content,
             "duration": duration,
-            "ratio": kwargs.get("ratio") or "adaptive",
+            "ratio": "adaptive" if model.startswith("doubao-seedance-2-5-") else (kwargs.get("ratio") or "adaptive"),
             "resolution": kwargs.get("resolution") or "720p"
         }
 

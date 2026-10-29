@@ -4,6 +4,7 @@ import { fetchApiModels } from '@/lib/workflowApi';
 const PROVIDER_LABELS: Record<string, string> = {
   dashscope: '阿里云百炼',
   ark: '火山方舟',
+  edge: 'Edge TTS',
   openai_compatible: '通用 OpenAI 兼容',
 };
 
@@ -29,7 +30,7 @@ export function groupModelOptions(
 }
 
 export async function fetchModelGroupsByType(
-  modelType: 'llm' | 'vlm' | 't2i' | 'i2i' | 'video',
+  modelType: 'llm' | 'vlm' | 't2i' | 'i2i' | 'video' | 'tts',
 ): Promise<ProviderGroup[]> {
   const models = await fetchApiModels({ modelType });
   return groupModelOptions(models);

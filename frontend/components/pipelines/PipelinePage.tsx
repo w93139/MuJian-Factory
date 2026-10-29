@@ -746,9 +746,31 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
   const [ratio, setRatio] = useState('9:16');
   const [videoResolution, setVideoResolution] = useState('720P');
   const [duration, setDuration] = useState(5);
+  const [ttsModel, setTtsModel] = useState('');
+  const [ttsCatalog, setTtsCatalog] = useState<ApiModelOption[]>([]);
   const [ttsVoice, setTtsVoice] = useState('zh-CN-YunjianNeural');
   const [ttsSpeed, setTtsSpeed] = useState(1);
   const [negativePrompt, setNegativePrompt] = useState(pipeline === 'standard' ? DEFAULT_STANDARD_STYLE_CONTROL : '');
+
+  useEffect(() => {
+    if (pipeline === 'action_transfer') return;
+    let cancelled = false;
+    fetchApiModels({ modelType: 'tts' }).then(models => {
+      if (cancelled) return;
+      setTtsCatalog(models);
+      setTtsModel(current => current || models.find(item => item.capabilities?.default)?.id || models[0]?.id || '');
+    }).catch(cause => setError(cause instanceof Error ? cause.message : '配音模型读取失败'));
+    return () => { cancelled = true; };
+  }, [pipeline]);
+
+  const ttsModels = groupModelOptions(ttsCatalog);
+  const ttsVoices = ttsCatalog.find(item => item.id === ttsModel)?.capabilities?.voices as string[] | undefined;
+  const voiceGroups = ttsVoices ? [{ provider: 'tts', label: '系统音色', models: ttsVoices.map(id => ({ id, label: id })) }] : TTS_VOICE_GROUPS;
+  const changeTtsModel = (id: string) => {
+    setTtsModel(id);
+    const voices = ttsCatalog.find(item => item.id === id)?.capabilities?.voices as string[] | undefined;
+    setTtsVoice(voices?.[0] || TTS_VOICE_GROUPS[0]?.models[0]?.id || '');
+  };
 
   useEffect(() => {
     const imageAbility = pipeline === 'digital_human' ? 'reference_image' : 'text_to_image';
@@ -986,6 +1008,7 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
             subtitle_template: templateMode ? selectedTemplate?.id : undefined,
             subtitle_template_fields: templateMode ? templateFieldValues : undefined,
             template_media_kind: templateMode ? templateMediaKind : undefined,
+            tts_model: ttsModel || undefined,
             tts_voice: ttsVoice,
             tts_speed: ttsSpeed,
             style_control: negativePrompt || undefined,
@@ -1012,6 +1035,7 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
               video_model: videoModel,
               video_ratio: ratio,
               video_resolution: videoResolution,
+              tts_model: ttsModel || undefined,
               tts_voice: ttsVoice,
               tts_speed: ttsSpeed,
               negative_prompt: negativePrompt || undefined,
@@ -1345,7 +1369,8 @@ export default function PipelinePage({ pipeline, title, subtitle }: PipelinePage
                   )}
                   {pipeline !== 'action_transfer' && (
                     <>
-                      <SelectField label="TTS 声音" value={ttsVoice} onChange={setTtsVoice} groups={TTS_VOICE_GROUPS} />
+                      <SelectField label="配音模型" value={ttsModel} onChange={changeTtsModel} groups={ttsModels} />
+                      <SelectField label="TTS 声音" value={ttsVoice} onChange={setTtsVoice} groups={voiceGroups} />
                       <NumberField label="TTS 速度" value={ttsSpeed} onChange={setTtsSpeed} min={0.5} max={2} />
                     </>
                   )}

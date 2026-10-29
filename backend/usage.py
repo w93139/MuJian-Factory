@@ -150,6 +150,8 @@ def reserve_usage(
             raise ValueError(f"模型未配置费用估算: {model}")
         rate = _amount(rate_value, "模型价格")
         estimated = rate * quantity
+        if images and metadata.get("input_image_price_per_image") is not None:
+            estimated += _amount(metadata["input_image_price_per_image"], "参考图片价格") * input_images
         if images and input_images > 1 and metadata.get("input_image_price_after_first") is not None:
             estimated += _amount(metadata["input_image_price_after_first"], "参考图片价格") * (input_images - 1)
     else:

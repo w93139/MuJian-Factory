@@ -148,6 +148,7 @@ async def run(task_id: str, params: dict) -> tuple[dict, list[dict]]:
             output_path=sentence_audio_path,
             voice=params.get("tts_voice", "zh-CN-YunjianNeural"),
             speed=float(params.get("tts_speed", 1.0)),
+            **({"model": params["tts_model"]} if params.get("tts_model", "edge-tts") != "edge-tts" else {}),
         )
         sentence_audio_paths.append(sentence_audio_path)
         sentence_duration = media_duration_seconds(sentence_audio_path)

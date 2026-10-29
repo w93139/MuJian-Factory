@@ -485,6 +485,9 @@ for _model, _name, _family, _minimum, _maximum, _rates in (
             "api_contract_verified": True,
         },
     }
+from models.catalog_oct2026 import additions  # noqa: E402
+
+_NEW_MODELS.update(additions({**MODEL_CONFIG["models"], **_NEW_MODELS}))
 MODEL_CONFIG["models"] = {**_NEW_MODELS, **MODEL_CONFIG["models"]}
 MODEL_CONFIG["models"]["wan2.7-image-pro"]["price_per_image"] = 0.5
 MODEL_CONFIG["models"]["doubao-seedream-5-0-pro-260628"]["input_image_price_after_first"] = 0.02
@@ -586,6 +589,8 @@ def model_type_capabilities(model_type: str, metadata: Optional[dict[str, Any]] 
             # Existing ImageClient maps 2K/4K; the newer Seedream adapter also
             # implements pixel-area tiers. Do not invent missing 1K/3K mappings.
             implemented = {"1K", "1.5K", "2K"} if "1.5K" in registered else {"720P", "1080P", "2K", "4K"}
+            if metadata.get("family") == "qwen-image":
+                implemented = {"1K", "2K"}
             capabilities["adapter_resolutions"] = [value for value in declared if value in implemented]
         return capabilities
     if model_type == "llm":

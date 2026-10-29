@@ -137,6 +137,21 @@ class ImageClient:
             logger.info("\n%s", "\n".join(lines))
             
         model_info = ensure_model_available(model)
+        if model.startswith("qwen-image-3.0"):
+            capabilities = model_info["capabilities"]
+            if len(image_paths or []) > capabilities["max_reference_images"]:
+                raise ValueError("Qwen Image 3.0 最多支持 3 张参考图")
+            if not custom_size:
+                tiers = {"1K": 1048576, "2K": 4194304, "720P": 1048576, "1080P": 4194304}
+                if resolution not in tiers:
+                    raise ValueError("Qwen Image 3.0 支持 1K、2K")
+                rw, rh = (int(part) for part in video_ratio.split(":"))
+                width = int((tiers[resolution] * rw / rh) ** 0.5) // 2 * 2
+                height = int(width * rh / rw) // 2 * 2
+                size = f"{width}*{height}"
+            width, height = (int(part) for part in size.split("*"))
+            if not capabilities["min_pixels"] <= width * height <= capabilities["max_pixels"]:
+                raise ValueError("Qwen Image 3.0 图片像素超出支持范围")
         if model in {"doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-flash-260915"} and not custom_size:
             tiers = {"1K": 1048576, "1.5K": 2359296, "2K": 4194304,
                      "720P": 1048576, "1080P": 2359296}
