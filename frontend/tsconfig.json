@@ -44,7 +44,9 @@
     ".next-legacy-preview/types/**/*.ts",
     ".next-legacy-preview/dev/types/**/*.ts",
     ".next-layout-legacy/types/**/*.ts",
-    ".next-layout-legacy/dev/types/**/*.ts"
+    ".next-layout-legacy/dev/types/**/*.ts",
+    ".next-local3110/types/**/*.ts",
+    ".next-local3110/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
